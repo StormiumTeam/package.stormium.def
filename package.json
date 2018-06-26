@@ -1,0 +1,16 @@
+{
+	"name": "package.stormium.default",
+	"displayName":"Stormium Default",
+	"version": "0.0.1",
+	"unity": "2018.2",
+	"description": "Stormium Default",
+	"keywords": [],
+    "dependencies": 
+    {
+		"package.guerro.shared": "0.0.1",
+		"package.stormium.core": "0.0.1",
+		"com.unity.inputsystem": "0.0.1",
+		"com.unity.entities": "0.0.11",
+		"com.unity.textmeshpro": "1.2.1"
+	}
+}
