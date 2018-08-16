@@ -1,16 +1,21 @@
 ﻿using System;
-using package.guerro.shared;
+using package.stormiumteam.shared;
 using Unity.Entities;
 using UnityEngine;
 
 namespace package.stormium.def
 {
+    public struct DefStMvJumpExecutable : IComponentData, IExecutableTag
+    {
+        
+    }
+    
     [Serializable]
     public struct DefStMvJump : IComponentData
     {
         public float BaseVerticalForce;
-        public int MaximumConsecutiveJump;
-        public float MinimalTimeBetweenJumps;
+        public int MaximumConsecutiveAirJump;
+        public float MinTimeBetweenJumps;
         public float MaxTimeBetweenJumps;
         public float GravityComplementForce;
     }
@@ -20,6 +25,7 @@ namespace package.stormium.def
     {
         public int CurrentCombo;
         public float ActionStartTime;
+        public int CurrentComboFromGround;
     }
 
     public class DefStMvJumpWrapper : BetterComponentWrapper<DefStMvJump>
@@ -29,8 +35,8 @@ namespace package.stormium.def
             Value = new DefStMvJump
             {
                 BaseVerticalForce = 0.275f,
-                MaximumConsecutiveJump = 2,
-                MinimalTimeBetweenJumps = 0.1f,
+                MaximumConsecutiveAirJump = 1,
+                MinTimeBetweenJumps = 0.1f,
                 MaxTimeBetweenJumps = 0.75f,
                 GravityComplementForce = 1f
             };

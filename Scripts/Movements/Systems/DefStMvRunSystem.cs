@@ -1,8 +1,6 @@
-﻿using System.Runtime.InteropServices;
-using package.guerro.shared;
+﻿using package.stormiumteam.shared;
 using package.stormium.core;
 using Unity.Entities;
-using Unity.Mathematics;
 using UnityEngine;
 
 namespace package.stormium.def
@@ -11,22 +9,11 @@ namespace package.stormium.def
     [AlwaysUpdateSystem]
     public class Lol : ComponentSystem
     {
-        private struct Group
-        {
-            public ComponentDataArray<StCharacter>          Characters;
-            public ComponentDataArray<DefStMvInput>         Inputs;
-            public ComponentDataArray<DefStVelocity>        Velocities;
-            public ComponentDataArray<DefStMvStamina>       Staminas;
-            public ComponentArray<CharacterControllerMotor> Motors;
-
-            public int Length;
-        }
-
         [Inject] private Group m_Group;
 
         private Vector3 GetSlide(Vector3 moveDir, Vector3 normal)
         {
-            return moveDir - (Vector3.Dot(moveDir, normal)) * normal;
+            return moveDir - Vector3.Dot(moveDir, normal) * normal;
         }
 
         private bool OnControllerHasHitACollider(ControllerColliderHit    hit,
@@ -48,7 +35,7 @@ namespace package.stormium.def
                 var flatVelocity = correctedVelocity.ToGrid(1);
                 var flatNormal   = hit.normal.ToGrid(1);
 
-                var undesiredMotion = flatNormal * (Vector3.Dot(flatVelocity, flatNormal));
+                var undesiredMotion = flatNormal * Vector3.Dot(flatVelocity, flatNormal);
                 var desiredMotion   = flatVelocity - undesiredMotion;
                 var desiredY        = desiredMotion.y;
 
@@ -63,9 +50,7 @@ namespace package.stormium.def
                 if ((controller.collisionFlags == CollisionFlags.Above
                      || (int) controller.collisionFlags == 3)
                     && angle < 90f && correctedVelocity.y > 0)
-                {
                     correctedVelocity.y = desiredY;
-                }
 
                 return true;
             }
@@ -103,7 +88,7 @@ namespace package.stormium.def
 
         protected override void OnUpdate()
         {
-            for (int i = 0; i != m_Group.Length; i++)
+            for (var i = 0; i != m_Group.Length; i++)
             {
                 var wasGrounded = m_Group.Motors[i].IsGrounded();
                 var oldPos      = m_Group.Motors[i].transform.position;
@@ -116,7 +101,7 @@ namespace package.stormium.def
                 correctVelocity.y = m_Group.Velocities[i].Velocity.y;*/
 
 
-                for (int j = ev.EventsStartIndex; j < ev.EventsLength; j++)
+                for (var j = ev.EventsStartIndex; j < ev.EventsLength; j++)
                 {
                     var hitEvent = ev.GetColliderHit(j);
                     if (OnControllerHasHitACollider(hitEvent, velocity.magnitude, oldPos, m_Group.Motors[i],
@@ -125,10 +110,9 @@ namespace package.stormium.def
                 }
 
                 if (wasGrounded && !m_Group.Motors[i].IsGrounded()
-                                && correctVelocity.y >= -0.5f && correctVelocity.y <= 0)
-                {
+                                && correctVelocity.y >= -0.5f && correctVelocity.y <= 0
+                                && correctVelocity.ToGrid(1).magnitude < 10f)
                     ProbeGround(m_Group.Motors[i]);
-                }
 
                 // Debug.DrawRay(oldPos, correctVelocity.ToGrid(1) * Time.deltaTime, Color.red, 0.25f, false);
 
@@ -141,19 +125,30 @@ namespace package.stormium.def
 
                 m_Group.Staminas[i] = stam;
 
-                m_Group.Velocities[i] = new DefStVelocity()
+                m_Group.Velocities[i] = new DefStVelocity
                 {
                     Velocity = correctVelocity
                 };
             }
         }
+
+        private struct Group
+        {
+            public ComponentDataArray<StCharacter>          Characters;
+            public ComponentDataArray<DefStMvInput>         Inputs;
+            public ComponentDataArray<DefStVelocity>        Velocities;
+            public ComponentDataArray<DefStMvStamina>       Staminas;
+            public ComponentArray<CharacterControllerMotor> Motors;
+
+            public readonly int Length;
+        }
     }
 
     /// <summary>
-    /// CPMA style movement
+    ///     CPMA style movement
     /// </summary>
-    [UpdateAfter(typeof(STUpdateOrder.UOMovementUpdate.Loop)),
-     UpdateBefore(typeof(STUpdateOrder.UOMovementUpdate.FixMovement))]
+    [UpdateAfter(typeof(STUpdateOrder.UOMovementUpdate.Loop))]
+    [UpdateBefore(typeof(STUpdateOrder.UOMovementUpdate.FixMovement))]
     [UpdateAfter(typeof(DefStMvGravitySystem))]
     public class DefStMvRunSystem : ComponentSystem
     {
@@ -192,18 +187,14 @@ namespace package.stormium.def
 
                 var oldY = velocityData.Velocity.y;
                 if (motor.IsGrounded())
-                {
-                    velocityData.Velocity = GroundMove(velocityData.Velocity,
+                    velocityData.Velocity = GroundMove(velocityData.Velocity.ToGrid(1),
                         true, motor.transform.rotation * ((Vector3) input.RunDirection).normalized, groundSettings,
                         comp,
                         delta);
-                }
                 else
-                {
                     velocityData.Velocity = AirMove(velocityData.Velocity,
                         motor.transform.rotation * ((Vector3) input.RunDirection).normalized, airSettings, comp,
                         delta);
-                }
 
                 velocityData.Velocity.y = oldY;
 
@@ -224,15 +215,21 @@ namespace package.stormium.def
                            Mathf.Clamp(currSpeed, gSettings.SpeedFrictionMin, gSettings.SpeedFrictionMax);
             friction = Mathf.Clamp(friction, gSettings.FrictionMin, gSettings.FrictionMax);
 
-            velocity = ApplyFriction(velocity, friction, gSettings, runData, delta);
+            velocity = ApplyFriction(velocity, friction * ((0.5f - (direction.magnitude * 0.5f)) + 0.5f), gSettings, runData, delta);
 
             var wishSpeed = direction.magnitude;
             direction.Normalize();
             wishSpeed *= gSettings.BaseSpeed;
+            
+            if (wishSpeed > gSettings.BaseSpeed && wishSpeed < currSpeed)
+            {
+                wishSpeed = Mathf.Lerp(currSpeed, wishSpeed, (StMath.Distance(wishSpeed, currSpeed) + 1f) * delta);
+            }
 
-            velocity = Accelerate(velocity, direction, wishSpeed, runData.Acceleration, 1f, delta);
-            var speed = velocity.magnitude;
-
+            velocity = Accelerate(velocity, direction, wishSpeed, runData.Acceleration, 0.25f, delta);
+            
+            var speed = velocity.magnitude;            
+            
             velocity.Normalize();
             velocity *= speed;
 
@@ -250,23 +247,25 @@ namespace package.stormium.def
             var wishSpeed           = direction.magnitude;
             direction.Normalize();
             wishSpeed *= aSettings.BaseSpeed;
-            
+
             var wishSpeed2 = wishSpeed;
             /*if (Vector3.Dot(velocity, direction) < 0)
                 dynamicAcceleration = runData.Deacceleration;*/
 
             var floatOrginal = velocity.ToGrid(1);
-            var vec          = velocity;                                      // copy
+            var vec          = velocity;                  // copy
             vec += direction * aSettings.Control * delta; //< 12.5 is the force direction
             var flatModified = vec.ToGrid(1);
 
             // If we use Y acceleration (to allow player to move a lot faster when jumping)
-            var velocityByAccelerationY = Vector3.ClampMagnitude(vec, Mathf.Max(velocity.magnitude, aSettings.BaseSpeed));
+            var velocityByAccelerationY =
+                Vector3.ClampMagnitude(vec, Mathf.Max(velocity.magnitude, aSettings.BaseSpeed));
             // Or no
-            var finalVelocity = Vector3.ClampMagnitude(flatModified, Mathf.Max(floatOrginal.magnitude, aSettings.BaseSpeed));
+            var finalVelocity =
+                Vector3.ClampMagnitude(flatModified, Mathf.Max(floatOrginal.magnitude, aSettings.BaseSpeed));
 
             velocity = Vector3.Lerp(finalVelocity, velocityByAccelerationY, 0.25f);
-            
+
 
             return velocity;
         }
@@ -335,6 +334,7 @@ namespace package.stormium.def
         private struct Group
         {
             public ComponentDataArray<StCharacter>                Characters;
+            public ComponentDataArray<DefStMvRunExecutable>       ExecuteFlags;
             public ComponentDataArray<DefStMvInput>               Inputs;
             public ComponentDataArray<DefStMvRun>                 Components;
             public ComponentDataArray<DefStMvGroundEnvironnement> GroundSettings;
@@ -342,7 +342,7 @@ namespace package.stormium.def
             public ComponentDataArray<DefStVelocity>              Velocities;
             public ComponentArray<CharacterControllerMotor>       Motors;
 
-            public int Length;
+            public readonly int Length;
         }
     }
 }

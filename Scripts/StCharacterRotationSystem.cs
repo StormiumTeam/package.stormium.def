@@ -30,7 +30,7 @@ namespace package.stormium.def
             public ComponentArray<Transform>       Transforms;
             public ComponentDataArray<StCharacter> Characters;
 
-            public int Length;
+            public readonly int Length;
         }
     }
 }

@@ -1,12 +1,12 @@
-﻿using package.guerro.shared;
+﻿using package.stormiumteam.shared;
 using package.stormium.core;
 using Unity.Entities;
 using UnityEngine;
 
 namespace package.stormium.def
 {
-    [UpdateAfter(typeof(STUpdateOrder.UOMovementUpdate.PreInit)),
-     UpdateBefore(typeof(STUpdateOrder.UOMovementUpdate.Loop))]
+    [UpdateAfter(typeof(STUpdateOrder.UOMovementUpdate.PreInit))]
+    [UpdateBefore(typeof(STUpdateOrder.UOMovementUpdate.Loop))]
     public class DefStMvGravitySystem : ComponentSystem
     {
         [Inject] private Group m_Group;
@@ -22,8 +22,8 @@ namespace package.stormium.def
             for (var i = 0; i != m_Group.Length; i++)
             {
                 var entity = m_Group.EntityArray[i];
-                var comp  = m_Group.Components[i];
-                var motor = m_Group.Motors[i];
+                var comp   = m_Group.Components[i];
+                var motor  = m_Group.Motors[i];
 
                 var velocityData = m_Group.Velocities[i];
 
@@ -35,16 +35,16 @@ namespace package.stormium.def
                     velocityData.Velocity.y = -motor.CharacterController.stepOffset;
 
                 if (motor.IsGrounded())
-                    motor.CharacterController.stepOffset = 0.3f;
+                    motor.CharacterController.stepOffset = 0.4f;
                 else
-                    motor.CharacterController.stepOffset = 0.1f;
+                    motor.CharacterController.stepOffset = 0.2f;
 
                 if (EntityManager.HasComponent<CameraTargetData>(entity))
                 {
                     var targetData = EntityManager.GetComponentData<CameraTargetData>(entity);
                     //targetData.PositionOffset += 
                 }
-                
+
                 m_Group.Velocities[i] = velocityData;
             }
         }
@@ -59,9 +59,9 @@ namespace package.stormium.def
             public ComponentDataArray<DefStMvGravity>       Components;
             public ComponentDataArray<DefStVelocity>        Velocities;
             public ComponentArray<CharacterControllerMotor> Motors;
-            public EntityArray EntityArray;
+            public EntityArray                              EntityArray;
 
-            public int Length;
+            public readonly int Length;
         }
     }
 }

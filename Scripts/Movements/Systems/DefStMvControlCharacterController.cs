@@ -1,4 +1,4 @@
-﻿using package.guerro.shared;
+﻿using package.stormiumteam.shared;
 using package.stormium.core;
 using Unity.Entities;
 using UnityEngine;
@@ -25,7 +25,7 @@ namespace package.stormium.def
             public ComponentArray<CharacterController>      Controllers;
             public ComponentArray<CharacterControllerMotor> Motors;
 
-            public int Length;
+            public readonly int Length;
         }
     }
 }

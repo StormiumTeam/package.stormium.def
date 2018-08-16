@@ -3,15 +3,13 @@
     "references": [
         "package.guerro.shared",
         "package.stormium.core",
+        "package.stormiumteam.networking",
         "Unity.Entities",
         "Unity.Entities.Hybrid",
         "Unity.Transforms",
         "Unity.Mathematics",
         "Unity.Collections",
-        "Unity.Jobs",
-        "Unity.InputSystem",
-        "Unity.Addressables",
-        "com.unity.postprocessing.Runtime"
+        "Unity.Jobs"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

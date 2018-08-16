@@ -1,9 +1,14 @@
 ﻿using System;
-using package.guerro.shared;
+using package.stormiumteam.shared;
 using Unity.Entities;
 
 namespace package.stormium.def
 {
+    public struct DefStMvDodgeOnWallExecutable : IComponentData, IExecutableTag
+    {
+        
+    }
+    
     [Serializable]
     public struct DefStMvDodgeOnWall : IComponentData
     {
@@ -20,7 +25,7 @@ namespace package.stormium.def
             Value = new DefStMvDodgeOnWall
             {
                 StaminaUse = 0.25f,
-                VerticalBump = 0f,
+                VerticalBump = 0.285f,
                 MaximalSpeed = 15f
             };
         }

@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-using package.guerro.shared;
+﻿using package.stormiumteam.shared;
 using package.stormium.core;
 using package.stormium.def.Utilities;
 using Unity.Entities;
@@ -36,21 +35,22 @@ namespace package.stormium.def
                 wallDodge.Cooldown -= delta;
 
                 if (input.WallDodge > 0.5f && !motor.IsGrounded()
-                                       && wallDodge.Cooldown <= 0f
-                                       && stamina.Value >= wallDodge.StaminaUse)
+                                           && wallDodge.Cooldown <= 0f
+                                           && stamina.Value >= wallDodge.StaminaUse)
                 {
                     var controller = motor.CharacterController;
                     var transform  = motor.transform;
 
-                    var worldCenter = transform.position + controller.center;
-                    var radius      = controller.radius;
-                    var skinWidth   = controller.skinWidth;
-                    var height = controller.height;
+                    var worldCenter     = transform.position + controller.center;
+                    var radius          = controller.radius;
+                    var skinWidth       = controller.skinWidth;
+                    var height          = controller.height;
                     var substractHeight = 0.6f; //< StepOffset
-                    var direction  = motor.transform.TransformDirection(input.RunDirection);
-                    direction = Vector3.Lerp(direction, velocityData.Velocity.ToGrid(1).normalized, 0.5f);
+                    var currVel         = velocityData.Velocity.ToGrid(1).normalized;
+                    var direction       = motor.transform.TransformDirection(input.RunDirection);
+                    direction   = Vector3.Lerp(direction, currVel, direction.magnitude);
                     direction.y = 0;
-                    
+
                     controller.enabled = false;
 
                     var castResult = UtilityWallRayTrace.RayTrace
@@ -66,27 +66,29 @@ namespace package.stormium.def
                         && castResult.normal.y < 0.01f)
                     {
                         var velocity = velocityData.Velocity;
-                        var oldY = velocity.y;
+                        var oldY     = velocity.y;
                         var dodgeDir = castResult.normal;
 
+                        Debug.DrawRay(castResult.point, castResult.normal, Color.red, 20f);
+
                         var lerpT = Mathf.Clamp(Vector3.Distance(dodgeDir, direction) * 0.5f, 0f, 0.5f);
-                        lerpT = 0f;
-                        
-                        dodgeDir = Vector3.Lerp(dodgeDir, direction, lerpT * 0.5f);
+                        //lerpT = 0f;
+
+                        //dodgeDir = Vector3.Lerp(dodgeDir, direction, lerpT * 0.5f);
                         dodgeDir.y *= 0f;
                         dodgeDir.Normalize();
 
                         velocity += dodgeDir * (velocity.ToGrid(1).magnitude + dodgeSetting.AdditiveForce);
 
                         var oldVelocity = velocity;
-                        
-                        velocity = velocity.normalized 
+
+                        velocity = velocity.normalized
                                    * Mathf.Clamp(velocity.ToGrid(1).magnitude + dodgeSetting.AdditiveForce,
                                        dodgeSetting.MinimumSpeed,
                                        wallDodge.MaximalSpeed);
 
                         Debug.Log($"{oldVelocity},,, {velocity}");
-                        
+
                         // Get the gravity
                         var gravity = Physics.gravity;
                         if (EntityManager.HasComponent<DefStMvGravity>(entity))
@@ -97,11 +99,11 @@ namespace package.stormium.def
                                 : gravity;
                         }
 
-                        velocity.y = oldY;
-                        velocity -= gravity * wallDodge.VerticalBump;
-                        
+                        velocity.y =  oldY;
+                        velocity   -= gravity * wallDodge.VerticalBump;
+
                         velocityData.Velocity = velocity;
-                        
+
                         stamina.Value -= wallDodge.StaminaUse;
 
                         wallDodge.Cooldown = 0.25f;
@@ -110,24 +112,27 @@ namespace package.stormium.def
 
                 if (motor.IsGrounded() && wallDodge.Cooldown > 0.1f) wallDodge.Cooldown = 0.1f;
 
-                m_Group.Staminas[i]            = stamina;
-                m_Group.WallDodgeComponents[i] = wallDodge;
-                m_Group.Velocities[i]          = velocityData;
+                // I could have used the SET from the indexer, but sometime it throw some errors...
+                // (as if the array was deallocated???)
+                EntityManager.SetComponentData(entity, stamina);
+                EntityManager.SetComponentData(entity, wallDodge);
+                EntityManager.SetComponentData(entity, velocityData);
             }
         }
 
         private struct Group
         {
-            public ComponentDataArray<StCharacter>          Characters;
-            public ComponentDataArray<DefStMvInput>         Inputs;
-            public ComponentDataArray<DefStMvDodgeOnWall>   WallDodgeComponents;
-            public ComponentDataArray<DefStMvDodge>         DodgeSettings;
-            public ComponentDataArray<DefStMvStamina>       Staminas;
-            public ComponentDataArray<DefStVelocity>        Velocities;
-            public ComponentArray<CharacterControllerMotor> Motors;
-            public EntityArray                              Entities;
+            public ComponentDataArray<StCharacter>                  Characters;
+            public ComponentDataArray<DefStMvDodgeOnWallExecutable> ExecuteFlags;
+            public ComponentDataArray<DefStMvInput>                 Inputs;
+            public ComponentDataArray<DefStMvDodgeOnWall>           WallDodgeComponents;
+            public ComponentDataArray<DefStMvDodge>                 DodgeSettings;
+            public ComponentDataArray<DefStMvStamina>               Staminas;
+            public ComponentDataArray<DefStVelocity>                Velocities;
+            public ComponentArray<CharacterControllerMotor>         Motors;
+            public EntityArray                                      Entities;
 
-            public int Length;
+            public readonly int Length;
         }
     }
 }

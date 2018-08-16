@@ -1,8 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using package.guerro.shared.settings;
+using package.stormiumteam.shared.settings;
 using Unity.Entities;
-using UnityEngine.AddressableAssets;
 using UnityEngine.Experimental.Rendering;
 
 namespace package.stormium.def.settings

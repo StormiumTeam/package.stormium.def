@@ -1,13 +1,12 @@
-﻿using System.Runtime.InteropServices;
-using package.guerro.shared;
+﻿using package.stormiumteam.shared;
 using package.stormium.core;
 using Unity.Entities;
 using UnityEngine;
 
 namespace package.stormium.def
 {
-    [UpdateAfter(typeof(STUpdateOrder.UOMovementUpdate.Loop)),
-     UpdateBefore(typeof(STUpdateOrder.UOMovementUpdate.FixMovement))]
+    [UpdateAfter(typeof(STUpdateOrder.UOMovementUpdate.Loop))]
+    [UpdateBefore(typeof(STUpdateOrder.UOMovementUpdate.FixMovement))]
     [UpdateAfter(typeof(DefStMvGravitySystem))]
     [UpdateAfter(typeof(DefStMvRunSystem))]
     public class DefStMvJumpSystem : ComponentSystem
@@ -25,6 +24,7 @@ namespace package.stormium.def
             {
                 var input  = m_Group.Inputs[i];
                 var comp   = m_Group.Components[i];
+                var state  = m_Group.States[i];
                 var motor  = m_Group.Motors[i];
                 var entity = m_Group.Entities[i];
 
@@ -39,51 +39,89 @@ namespace package.stormium.def
                         : gravity;
                 }
 
-                if (input.Jump <= 0.5f
-                    || motor.IsGrounded()
-                    || velocityData.Velocity.y > -(gravity.y) * comp.MaximalVerticalForce)
+                if (state.ActionStartTime < comp.MaxTimeBetweenJumps + 10)
+                    state.ActionStartTime += delta;
+
+                var doJump = input.Jump > 0
+                             &&
+                             (
+                                 motor.IsGrounded() ||
+                                 (state.CurrentCombo < comp.MaximumConsecutiveAirJump
+                                 && state.CurrentComboFromGround > 0
+                                 && state.ActionStartTime > comp.MinTimeBetweenJumps
+                                 && state.ActionStartTime < comp.MaxTimeBetweenJumps)
+                             );
+                /*if (input.Jump > 0
+                    && motor.IsGrounded())
                 {
-                    comp.JumpState = 0;
+                    doJump = true;
+                }
+                else if (input.Jump > 0
+                         && state.CurrentCombo < comp.MaximumConsecutiveAirJump
+                         && state.ActionStartTime > comp.MinTimeBetweenJumps
+                         && state.ActionStartTime < comp.MaxTimeBetweenJumps)
+                {
+                    doJump = true;
+                }*/
+
+                if (motor.IsGrounded())
+                {
+                    state.ActionStartTime = 0;
+                    state.CurrentCombo    = 0;
+                    state.CurrentComboFromGround = 0;
                 }
 
-                if (input.Jump > 0.5f && comp.JumpState > 0)
+                if (doJump)
                 {
-                    var toAdd = -(gravity.y * comp.VerticalForceDelta) * Time.deltaTime;
-                    toAdd += velocityData.Velocity.y;
-                    if (toAdd > -gravity.y * comp.MaximalVerticalForce)
+                    state.ActionStartTime = 0;
+
+                    velocityData.Velocity.y =  Mathf.Max(0, velocityData.Velocity.y);
+                    velocityData.Velocity   += -gravity * comp.GravityComplementForce * comp.BaseVerticalForce;
+
+                    // Apply a little dash in the current direction
+                    if (!motor.IsGrounded())
                     {
-                        toAdd          = -gravity.y * comp.MaximalVerticalForce;
-                        comp.JumpState = 0;
+                        var direction = motor.transform.rotation * ((Vector3) input.RunDirection).normalized;
+
+                        // We don't want the player to instantly be in this direction
+                        direction = Vector3.Lerp(velocityData.Velocity.ToGrid(1).normalized, direction, 0.99f);
+
+                        var previousY = velocityData.Velocity.y;
+                        var previousSpeed = velocityData.Velocity.ToGrid(1).magnitude;
+                        var predictedVelocity = velocityData.Velocity + direction.normalized;
+                        velocityData.Velocity += direction * (velocityData.Velocity.ToGrid(1).magnitude + 4);
+                        velocityData.Velocity = Vector3.ClampMagnitude
+                        (velocityData.Velocity.ToGrid(1),
+                            Mathf.Min(previousSpeed + 1, velocityData.Velocity.ToGrid(1).magnitude)
+                        );
+                        velocityData.Velocity = Vector3.Lerp(velocityData.Velocity, predictedVelocity, 0.1f);
+                        velocityData.Velocity.y =  previousY;
+                        
+                        state.CurrentCombo++;
                     }
-
-                    velocityData.Velocity.y = toAdd;
+                    else
+                    {
+                        state.CurrentComboFromGround++;
+                    }
                 }
-
-                if (input.Jump > 0.5f && motor.IsGrounded()
-                                      && comp.JumpState == 0)
-                {
-                    velocityData.Velocity.y =  0;
-                    velocityData.Velocity   -= gravity * comp.BaseVerticalForce;
-
-                    comp.JumpState++;
-                }
-
-                m_Group.Components[i] = comp;
+                
+                m_Group.States[i]     = state;
                 m_Group.Velocities[i] = velocityData;
             }
         }
 
         private struct Group
         {
-            public ComponentDataArray<StCharacter>          Characters;
-            public ComponentDataArray<DefStMvInput>         Inputs;
-            public ComponentDataArray<DefStMvJump>          Components;
-            public ComponentDataArray<DefStMvJumpState>     States;
-            public ComponentDataArray<DefStVelocity>        Velocities;
-            public ComponentArray<CharacterControllerMotor> Motors;
-            public EntityArray                              Entities;
+            public ComponentDataArray<StCharacter>           Characters;
+            public ComponentDataArray<DefStMvJumpExecutable> ExecuteFlags;
+            public ComponentDataArray<DefStMvInput>          Inputs;
+            public ComponentDataArray<DefStMvJump>           Components;
+            public ComponentDataArray<DefStMvJumpState>      States;
+            public ComponentDataArray<DefStVelocity>         Velocities;
+            public ComponentArray<CharacterControllerMotor>  Motors;
+            public EntityArray                               Entities;
 
-            public int Length;
+            public readonly int Length;
         }
     }
 }

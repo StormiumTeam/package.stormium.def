@@ -1,18 +1,11 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Reflection;
-using EudiFramework;
-using package.guerro.shared;
-using Scripts.Physics;
-using Scripts.Utilities;
+using package.stormiumteam.shared;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
-using UnityEngine.ResourceManagement;
-using UnityEngine.SceneManagement;
 using Debug = UnityEngine.Debug;
 
 namespace package.stormium.def
@@ -47,9 +40,11 @@ namespace package.stormium.def
 
         public DefStMvJump MvJumpData = new DefStMvJump()
         {
-            BaseVerticalForce    = 0.25f,
-            VerticalForceDelta   = 0.05f,
-            MaximalVerticalForce = 0.52f,
+            BaseVerticalForce      = 0.275f,
+            MaximumConsecutiveAirJump = 2,
+            MinTimeBetweenJumps    = 0.1f,
+            MaxTimeBetweenJumps    = 0.75f,
+            GravityComplementForce = 1f
         };
 
         public DefStMvDodgeOnGround MvDodgeOnGroundData = new DefStMvDodgeOnGround()
@@ -73,7 +68,6 @@ namespace package.stormium.def
             currPipeline = GraphicsSettings.renderPipelineAsset;
             GraphicsSettings.renderPipelineAsset = null;
             
-
             var goe = gameObject.GetComponent<GameObjectEntity>();
 
             /*goe.EntityManager.AddComponentData(goe.Entity, new StCharacter());
@@ -101,7 +95,13 @@ namespace package.stormium.def
             gameObject.AddComponent<DefStMvAirEnvironnementWrapper>();
             gameObject.AddComponent<DefStMvInputWrapper>();
             gameObject.AddComponent<CameraTargetComponent>();
+            
+            // Add executables
+            goe.EntityManager.AddComponentData(goe.Entity, new DefStMvDodgeOnGroundExecutable());
+            goe.EntityManager.AddComponentData(goe.Entity, new DefStMvJumpExecutable());
+            goe.EntityManager.AddComponentData(goe.Entity, new DefStMvRunExecutable());
 
+            goe.EntityManager.AddComponentData(goe.Entity, new DefStMvJumpState());
             goe.EntityManager.SetComponentData(goe.Entity, MvRunData);
             goe.EntityManager.SetComponentData(goe.Entity, MvJumpData);
             goe.EntityManager.SetComponentData(goe.Entity, MvDodgeOnGroundData);

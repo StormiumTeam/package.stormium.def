@@ -1,4 +1,4 @@
-﻿using package.guerro.shared.modding;
+﻿using package.stormiumteam.shared.modding;
 using Unity.Entities;
 using UnityEngine;
 
@@ -13,9 +13,6 @@ namespace package.stormium.def
             Register<DefStMvRunSystem>();
             Register<StCharacterRotationSystem>();
             Register<StDefaultCharacterCameraSystem>();
-            
-            // Set config
-            Application.targetFrameRate = 60;
         }
 
         protected override void OnUnregister()

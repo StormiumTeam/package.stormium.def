@@ -1,4 +1,4 @@
-﻿using package.guerro.shared;
+﻿using package.stormiumteam.shared;
 using package.stormium.core;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -15,29 +15,6 @@ namespace package.stormium.def
         protected override void OnCreateManager(int capacity)
         {
             //UpdateRigidbodySystem.OnAfterSimulate += UpdateRigidbodySystemOnOnAfterSimulate;
-        }
-
-        private float Step(float o, float d, float t)
-        {
-            var r = o;
-            if (d > o)
-                r += t;
-            else if (d < o)
-                r -= t;
-
-            // d = 5, o = 5.5, t = 1, r => o - t = 4.5
-            // d < o and d > r
-            // so r = d
-            if (d < o && d > r)
-                r = d;
-            
-            // d = 8, o = 7.5, t = 1, r => o + t = 8.5
-            // d > o and d < r
-            // so r = d
-            if (d > o && d < r)
-                r = d;
-            
-            return r;
         }
 
         private void UpdateRigidbodySystemOnOnAfterSimulate()
@@ -79,14 +56,19 @@ namespace package.stormium.def
 
                     var yChange = Mathf.Max(Mathf.Min(1 - obs, 1) * 1.75f, 1);
                     
-                    pos.y = Step(posY, pos.y, Time.deltaTime * (abs * yChange * 0.01f));
+                    pos.y = StMath.MoveTorward(posY, pos.y, Time.deltaTime * (abs * yChange * 0.01f));
                 }
 
                 //pos.y = posY;
                 
                 target.Position    = pos;
                 target.Rotation    = transform.rotation.eulerAngles;
-                target.FieldOfView = Mathf.Lerp(target.FieldOfView, 70f + (Mathf.Clamp(flatVelocity.magnitude, 6, 20) * 0.75f), Time.deltaTime * 8);
+                
+                var distance = StMath.Distance(target.FieldOfView, 70f + Mathf.Clamp(flatVelocity.magnitude, 6, 20) * 0.6f);
+                distance = Mathf.Max(0.25f, distance);
+                
+                target.FieldOfView = StMath.MoveTorward(target.FieldOfView, 70f + (Mathf.Clamp(flatVelocity.magnitude, 6, 20) * 0.6f),
+                    Time.deltaTime * distance * 10);
 
                 // Todo: move that
                 head.RotationY += Input.GetAxisRaw("Mouse Y") * 0.9f;
@@ -141,7 +123,7 @@ namespace package.stormium.def
             public ComponentDataArray<DefStMvInformation> Informations;
             public ComponentDataArray<DefStVelocity> Velocities;
 
-            public int Length;
+            public readonly int Length;
         }
     }
 }

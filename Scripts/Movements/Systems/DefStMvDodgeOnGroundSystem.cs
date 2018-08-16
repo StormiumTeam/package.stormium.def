@@ -1,4 +1,4 @@
-﻿using package.guerro.shared;
+﻿using package.stormiumteam.shared;
 using package.stormium.core;
 using Unity.Entities;
 using UnityEngine;
@@ -22,20 +22,20 @@ namespace package.stormium.def
         {
             for (var i = 0; i != m_Group.Length; i++)
             {
-                var input       = m_Group.Inputs[i];
-                var stamina     = m_Group.Staminas[i];
+                var input        = m_Group.Inputs[i];
+                var stamina      = m_Group.Staminas[i];
                 var runDodge     = m_Group.RunDodgeComponents[i];
                 var dodgeSetting = m_Group.DodgeSettings[i];
-                var motor       = m_Group.Motors[i];
-                var entity      = m_Group.Entities[i];
+                var motor        = m_Group.Motors[i];
+                var entity       = m_Group.Entities[i];
 
                 var velocityData = m_Group.Velocities[i];
 
                 runDodge.Cooldown -= delta;
 
                 if (input.Dodge > 0.5f && motor.IsGrounded()
-                                      && runDodge.Cooldown <= 0f
-                                      && stamina.Value >= runDodge.StaminaUse)
+                                       && runDodge.Cooldown <= 0f
+                                       && stamina.Value >= runDodge.StaminaUse)
                 {
                     var onSlopeAndGrounded = motor.IsGrounded() && motor.IsOnSlope();
 
@@ -64,9 +64,17 @@ namespace package.stormium.def
                                            1 - (motorRot.magnitude - direction.magnitude))
                                        .normalized;
 
-                    velocityData.Velocity += direction * dodgeSetting.AdditiveForce;
+                    //velocityData.Velocity += direction * dodgeSetting.AdditiveForce;
+                    var oldY          = velocityData.Velocity.y;
+                    var previousSpeed = velocityData.Velocity.ToGrid(1).magnitude;
+                    velocityData.Velocity +=
+                        direction * (velocityData.Velocity.ToGrid(1).magnitude + dodgeSetting.AdditiveForce);
+                    velocityData.Velocity = Vector3.ClampMagnitude
+                    (velocityData.Velocity.ToGrid(1),
+                        Mathf.Min(previousSpeed + dodgeSetting.AdditiveForce, velocityData.Velocity.ToGrid(1).magnitude)
+                    );
+                    velocityData.Velocity.y = oldY;
 
-                    var oldY = velocityData.Velocity.y;
                     var speed =
                         Mathf.Min(
                             Mathf.Max(velocityData.Velocity.ToGrid(1).magnitude, dodgeSetting.MinimumSpeed),
@@ -88,24 +96,25 @@ namespace package.stormium.def
 
                 if (motor.IsGrounded() && runDodge.Cooldown > 0.25f) runDodge.Cooldown = 0.25f;
 
-                m_Group.Staminas[i]          = stamina;
+                m_Group.Staminas[i]           = stamina;
                 m_Group.RunDodgeComponents[i] = runDodge;
-                m_Group.Velocities[i]        = velocityData;
+                m_Group.Velocities[i]         = velocityData;
             }
         }
 
         private struct Group
         {
-            public ComponentDataArray<StCharacter>          Characters;
-            public ComponentDataArray<DefStMvInput>         Inputs;
-            public ComponentDataArray<DefStMvDodgeOnGround>       RunDodgeComponents;
-            public ComponentDataArray<DefStMvDodge>          DodgeSettings;
-            public ComponentDataArray<DefStMvStamina>       Staminas;
-            public ComponentDataArray<DefStVelocity>        Velocities;
-            public ComponentArray<CharacterControllerMotor> Motors;
-            public EntityArray                              Entities;
+            public ComponentDataArray<StCharacter>                    Characters;
+            public ComponentDataArray<DefStMvDodgeOnGroundExecutable> ExecuteFlags;
+            public ComponentDataArray<DefStMvInput>                   Inputs;
+            public ComponentDataArray<DefStMvDodgeOnGround>           RunDodgeComponents;
+            public ComponentDataArray<DefStMvDodge>                   DodgeSettings;
+            public ComponentDataArray<DefStMvStamina>                 Staminas;
+            public ComponentDataArray<DefStVelocity>                  Velocities;
+            public ComponentArray<CharacterControllerMotor>           Motors;
+            public EntityArray                                        Entities;
 
-            public int Length;
+            public readonly int Length;
         }
     }
 }

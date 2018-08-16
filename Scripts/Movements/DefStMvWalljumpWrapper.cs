@@ -1,9 +1,14 @@
 ﻿using System;
-using package.guerro.shared;
+using package.stormiumteam.shared;
 using Unity.Entities;
 
 namespace package.stormium.def
 {
+    public struct DefStMvWalljumpExecutable : IComponentData, IExecutableTag
+    {
+        
+    }
+    
     [Serializable]
     public struct DefStMvWalljump : IComponentData
     {

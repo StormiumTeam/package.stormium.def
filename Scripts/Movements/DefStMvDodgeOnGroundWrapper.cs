@@ -1,9 +1,15 @@
 ﻿using System;
-using package.guerro.shared;
+using package.stormiumteam.shared;
 using Unity.Entities;
+using UnityEngine;
 
 namespace package.stormium.def
 {
+    public struct DefStMvDodgeOnGroundExecutable : IComponentData, IExecutableTag
+    {
+        
+    }
+    
     [Serializable]
     public struct DefStMvDodgeOnGround : IComponentData
     {
@@ -11,7 +17,6 @@ namespace package.stormium.def
         public float VerticalBump;
         public float Cooldown;
         public float MaximalSpeed;
-        public int AirDodgeState;
     }
 
     public class DefStMvDodgeOnGroundWrapper : BetterComponentWrapper<DefStMvDodgeOnGround>
