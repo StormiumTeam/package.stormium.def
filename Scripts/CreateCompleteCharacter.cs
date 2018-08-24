@@ -1,8 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using package.stormium.def.characters;
+using package.stormium.def.Network;
+using package.stormiumteam.networking.ecs;
 using package.stormiumteam.shared;
+using package.stormiumteam.shared.online;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Transforms;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -12,7 +18,8 @@ namespace package.stormium.def
 {
     [RequireComponent(typeof(ReferencableGameObject), typeof(GameObjectEntity))]
     [RequireComponent(typeof(CharacterController), typeof(CharacterControllerMotor))]
-    public class CreateCompleteCharacter : MonoBehaviour
+    public class CreateCompleteCharacter : MonoBehaviour,
+        IDefStCharacterOnJump
     {
         public DefStMvRun MvRunData = new DefStMvRun
         {
@@ -58,16 +65,9 @@ namespace package.stormium.def
             AdditiveForce = 5f
         };
 
-        public static bool hasLoadedScene = false;
-        public static RenderPipelineAsset currPipeline;
-        private void Awake()
-        {
-            /*Camera.main.enabled = false;
-            Camera.main.enabled = true;*/
 
-            currPipeline = GraphicsSettings.renderPipelineAsset;
-            GraphicsSettings.renderPipelineAsset = null;
-            
+        private void Awake()
+        {            
             var goe = gameObject.GetComponent<GameObjectEntity>();
 
             /*goe.EntityManager.AddComponentData(goe.Entity, new StCharacter());
@@ -80,36 +80,52 @@ namespace package.stormium.def
 
             var referencableGameObject = ReferencableGameObject.GetComponent<ReferencableGameObject>(gameObject);
 
-            gameObject.AddComponent<StCharacterWrapper>();
-            gameObject.AddComponent<DefStMvStaminaWrapper>();
-            gameObject.AddComponent<DefStCharacterHeadWrapper>();
-            gameObject.AddComponent<DefStVelocityWrapper>();
-            gameObject.AddComponent<DefStMvGravityWrapper>();
-            gameObject.AddComponent<DefStMvJumpWrapper>();
-            gameObject.AddComponent<DefStMvDodgeWrapper>();
-            gameObject.AddComponent<DefStMvDodgeOnGroundWrapper>();
-            gameObject.AddComponent<DefStMvDodgeOnWallWrapper>();
-            gameObject.AddComponent<DefStMvWalljumpWrapper>();
-            gameObject.AddComponent<DefStMvRunWrapper>();
-            gameObject.AddComponent<DefStMvGroundEnvironnementWrapper>();
-            gameObject.AddComponent<DefStMvAirEnvironnementWrapper>();
-            gameObject.AddComponent<DefStMvInputWrapper>();
-            gameObject.AddComponent<CameraTargetComponent>();
+            referencableGameObject.GetOrAddComponent<StCharacterWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvStaminaWrapper>();
+            referencableGameObject.GetOrAddComponent<StEntityHeadLookAtWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStVelocityWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvGravityWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvJumpWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvDodgeWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvDodgeOnGroundWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvDodgeOnWallWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvWalljumpWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvRunWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvGroundEnvironnementWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvAirEnvironnementWrapper>();
+            referencableGameObject.GetOrAddComponent<DefStMvInputWrapper>();
+            referencableGameObject.GetOrAddComponent<CameraTargetComponent>();
+
+            if (GameObject.Find("use_debug"))
+            {
+                goe.Entity.SetOrAddComponentData(new NetworkEntity(1, goe.Entity));
+                goe.Entity.SetOrAddComponentData(new StCharacter());
+                goe.Entity.SetOrAddComponentData(new VoidSystem<DefaultNetSyncTransformDataSystem>());
+                goe.Entity.SetOrAddComponentData(new CharacterPlayerOwner()
+                {
+                    Target = World.Active.GetOrCreateManager<GamePlayerBank>().MainPlayer.WorldPointer
+                });
+            }
             
             // Add executables
-            goe.EntityManager.AddComponentData(goe.Entity, new DefStMvDodgeOnGroundExecutable());
-            goe.EntityManager.AddComponentData(goe.Entity, new DefStMvJumpExecutable());
-            goe.EntityManager.AddComponentData(goe.Entity, new DefStMvRunExecutable());
+            goe.Entity.SetOrAddComponentData(new DefStMvDodgeOnGroundExecutable());
+            goe.Entity.SetOrAddComponentData(new DefStMvJumpExecutable());
+            goe.Entity.SetOrAddComponentData(new DefStMvDodgeOnWallExecutable());
+            goe.Entity.SetOrAddComponentData(new DefStMvRunExecutable());
+            
+            goe.Entity.SetOrAddComponentData(new DefStMvJumpState());
+            goe.Entity.SetOrAddComponentData(new Position());
+            goe.Entity.SetOrAddComponentData(new Rotation());
+            //goe.Entity.SetOrAddSharedComponentData(new NetSnapshotPosition(new List<NetSnapshotPosition.Frame>()));
+            
+            goe.Entity.SetOrAddComponentData(MvRunData);
+            goe.Entity.SetOrAddComponentData(MvJumpData);
+            goe.Entity.SetOrAddComponentData(MvDodgeOnGroundData);
+            goe.Entity.SetOrAddComponentData(GroundSettings);
+            goe.Entity.SetOrAddComponentData(AirSettings);
+            goe.Entity.SetOrAddComponentData(AirSettings);
 
-            goe.EntityManager.AddComponentData(goe.Entity, new DefStMvJumpState());
-            goe.EntityManager.SetComponentData(goe.Entity, MvRunData);
-            goe.EntityManager.SetComponentData(goe.Entity, MvJumpData);
-            goe.EntityManager.SetComponentData(goe.Entity, MvDodgeOnGroundData);
-            goe.EntityManager.SetComponentData(goe.Entity, GroundSettings);
-            goe.EntityManager.SetComponentData(goe.Entity, AirSettings);
-            goe.EntityManager.SetComponentData(goe.Entity, MvDodgeData);
-
-            int trueCount = 0;
+            /*int trueCount = 0;
             Type type = null;
             var watch = new Stopwatch();
             watch.Start();
@@ -135,7 +151,7 @@ namespace package.stormium.def
             }
 
             watch.Stop();
-            Debug.Log(trueCount + ", f1 ms: " + watch.Elapsed.ToString());
+            Debug.Log(trueCount + ", f1 ms: " + watch.Elapsed.ToString());*/
 
             var physicGroup = CPhysicSettings.Active.RegisterOrCreateGroup("Characters");
             CPhysicSettings.Active.SetGroup(goe.Entity, physicGroup);
@@ -152,27 +168,23 @@ namespace package.stormium.def
                 }
 
             entities.Dispose();
+            
+            World.Active.GetOrCreateManager<AppEventSystem>().SubscribeToAll(this);
         }
         
         private Vector3 m_LastPosition;
         private float m_Speed;
 
-        public Animator Animator;
+        public Animator[] Animators;
 
         private void LateUpdate()
         {
-            if (!hasLoadedScene && Time.frameCount == 5)
-            {
-                hasLoadedScene = true;
-                GraphicsSettings.renderPipelineAsset = currPipeline;
-            }
-            
             var flatPosition = transform.position.ToGrid(1);
             
             m_Speed        = (flatPosition - m_LastPosition).magnitude / Time.deltaTime;
             m_LastPosition = flatPosition;
 
-            var isGrounded = GetComponent<CharacterControllerMotor>().IsGrounded();
+            /*var isGrounded = GetComponent<CharacterControllerMotor>().IsGrounded();
             if (!Animator.GetBool("InAir") && !isGrounded)
             {
                 Animator.SetTrigger("StartJump");
@@ -184,7 +196,15 @@ namespace package.stormium.def
                 Animator.SetTrigger("EndJump");
                 Animator.Play("FPP_EndJump");
             }
-            Animator.SetBool("InAir", !isGrounded);
+            Animator.SetBool("InAir", !isGrounded);*/
+        }
+        
+        public void CharacterOnJump(Entity entity)
+        {
+            foreach (var animator in Animators)
+            {
+                animator.SetTrigger("CharacterJump");
+            }   
         }
 
         private void OnGUI()

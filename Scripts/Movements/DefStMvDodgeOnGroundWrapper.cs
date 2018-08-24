@@ -17,6 +17,7 @@ namespace package.stormium.def
         public float VerticalBump;
         public float Cooldown;
         public float MaximalSpeed;
+        public Vector3 Direction;
     }
 
     public class DefStMvDodgeOnGroundWrapper : BetterComponentWrapper<DefStMvDodgeOnGround>

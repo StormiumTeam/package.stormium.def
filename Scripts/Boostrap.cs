@@ -11,7 +11,7 @@ namespace package.stormium.def
             // Create systems
             Register<DefStMvRunInputSystem>();
             Register<DefStMvRunSystem>();
-            Register<StCharacterRotationSystem>();
+            Register<StEntityHeadLookAtSystem>();
             Register<StDefaultCharacterCameraSystem>();
         }
 

@@ -1,5 +1,7 @@
 ﻿using package.stormiumteam.shared;
 using package.stormium.core;
+using package.stormiumteam.networking;
+using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 
@@ -88,47 +90,54 @@ namespace package.stormium.def
 
         protected override void OnUpdate()
         {
-            for (var i = 0; i != m_Group.Length; i++)
+            if (!GameLaunch.IsServer)
+                return;
+
+            using (var cmd = new EntityCommandBuffer(Allocator.Temp))
             {
-                var wasGrounded = m_Group.Motors[i].IsGrounded();
-                var oldPos      = m_Group.Motors[i].transform.position;
-                var velocity    = m_Group.Velocities[i].Velocity * Time.deltaTime;
-
-                var ev = m_Group.Motors[i].MoveBy(velocity);
-
-                var correctVelocity = m_Group.Velocities[i].Velocity;
-                /*var correctVelocity = (m_Group.Motors[i].transform.position - oldPos) / Time.deltaTime;
-                correctVelocity.y = m_Group.Velocities[i].Velocity.y;*/
-
-
-                for (var j = ev.EventsStartIndex; j < ev.EventsLength; j++)
+                for (var i = 0; i != m_Group.Length; i++)
                 {
-                    var hitEvent = ev.GetColliderHit(j);
-                    if (OnControllerHasHitACollider(hitEvent, velocity.magnitude, oldPos, m_Group.Motors[i],
-                        ref correctVelocity))
-                        break;
+                    var wasGrounded = m_Group.Motors[i].IsGrounded();
+                    var oldPos      = m_Group.Motors[i].transform.position;
+                    var velocity    = m_Group.Velocities[i].Velocity * Time.deltaTime;
+
+                    var ev = m_Group.Motors[i].MoveBy(velocity);
+
+                    var correctVelocity = m_Group.Velocities[i].Velocity;
+                    /*var correctVelocity = (m_Group.Motors[i].transform.position - oldPos) / Time.deltaTime;
+                    correctVelocity.y = m_Group.Velocities[i].Velocity.y;*/
+
+
+                    for (var j = ev.EventsStartIndex; j < ev.EventsLength; j++)
+                    {
+                        var hitEvent = ev.GetColliderHit(j);
+                        if (OnControllerHasHitACollider(hitEvent, velocity.magnitude, oldPos, m_Group.Motors[i],
+                            ref correctVelocity))
+                            break;
+                    }
+
+                    if (wasGrounded && !m_Group.Motors[i].IsGrounded()
+                                    && correctVelocity.y >= -0.5f && correctVelocity.y <= 0
+                                    && correctVelocity.ToGrid(1).magnitude < 11f)
+                        ProbeGround(m_Group.Motors[i]);
+
+                    // Debug.DrawRay(oldPos, correctVelocity.ToGrid(1) * Time.deltaTime, Color.red, 0.25f, false);
+
+                    var stam = m_Group.Staminas[i];
+                    stam.Value = Mathf.Max(stam.Value, 0);
+
+                    stam.Value += stam.GainPerSecond * Time.deltaTime;
+
+                    stam.Value = Mathf.Min(stam.Value, stam.Max);
+
+                    cmd.SetComponent(m_Group.Entities[i], stam);
+                    cmd.SetComponent(m_Group.Entities[i], new DefStVelocity
+                    {
+                        Velocity = correctVelocity
+                    });
                 }
-
-                if (wasGrounded && !m_Group.Motors[i].IsGrounded()
-                                && correctVelocity.y >= -0.5f && correctVelocity.y <= 0
-                                && correctVelocity.ToGrid(1).magnitude < 10f)
-                    ProbeGround(m_Group.Motors[i]);
-
-                // Debug.DrawRay(oldPos, correctVelocity.ToGrid(1) * Time.deltaTime, Color.red, 0.25f, false);
-
-                var stam = m_Group.Staminas[i];
-                stam.Value = Mathf.Max(stam.Value, 0);
-
-                stam.Value += stam.GainPerSecond * Time.deltaTime;
-
-                stam.Value = Mathf.Min(stam.Value, stam.Max);
-
-                m_Group.Staminas[i] = stam;
-
-                m_Group.Velocities[i] = new DefStVelocity
-                {
-                    Velocity = correctVelocity
-                };
+                
+                cmd.Playback(EntityManager);
             }
         }
 
@@ -139,6 +148,7 @@ namespace package.stormium.def
             public ComponentDataArray<DefStVelocity>        Velocities;
             public ComponentDataArray<DefStMvStamina>       Staminas;
             public ComponentArray<CharacterControllerMotor> Motors;
+            public EntityArray Entities;
 
             public readonly int Length;
         }
@@ -226,7 +236,7 @@ namespace package.stormium.def
                 wishSpeed = Mathf.Lerp(currSpeed, wishSpeed, (StMath.Distance(wishSpeed, currSpeed) + 1f) * delta);
             }
 
-            velocity = Accelerate(velocity, direction, wishSpeed, runData.Acceleration, 0.25f, delta);
+            velocity = Accelerate(velocity, direction, wishSpeed, runData.Acceleration, 0.1f, delta);
             
             var speed = velocity.magnitude;            
             

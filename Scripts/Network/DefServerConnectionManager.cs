@@ -153,8 +153,7 @@ namespace package.stormium.def.Network
                     player = new GamePlayer(em.CreateEntity());
                     var masterServerPlayerId = new MasterServerPlayerId()
                     {
-                        Id      = masterId,
-                        IsLocal = owned
+                        Id      = masterId
                     };
 
                     player.WorldPointer.SetOrAddSharedComponentData(masterServerPlayerId, MainWorld);
@@ -164,8 +163,7 @@ namespace package.stormium.def.Network
                 {
                     var masterServerPlayerId = new MasterServerPlayerId()
                     {
-                        Id      = masterId,
-                        IsLocal = owned
+                        Id      = masterId
                     };
                     player.WorldPointer.SetOrAddSharedComponentData(masterServerPlayerId, MainWorld);
                 }
@@ -290,8 +288,7 @@ namespace package.stormium.def.Network
                 player = new GamePlayer(em.CreateEntity());
                 var masterServerPlayerId = new MasterServerPlayerId()
                 {
-                    Id      = playerId,
-                    IsLocal = false
+                    Id      = playerId
                 };
                 
                 em.SetOrAddSharedComponentData(player.WorldPointer, masterServerPlayerId);
@@ -301,8 +298,7 @@ namespace package.stormium.def.Network
             {
                 var masterServerPlayerId = new MasterServerPlayerId()
                 {
-                    Id      = playerId,
-                    IsLocal = false
+                    Id      = playerId
                 };
 
                 em.SetOrAddSharedComponentData(player.WorldPointer, masterServerPlayerId);

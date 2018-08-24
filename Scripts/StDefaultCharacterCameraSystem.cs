@@ -8,6 +8,7 @@ using UnityEngine.Jobs;
 namespace package.stormium.def
 {
     [UpdateAfter(typeof(Lol))]
+    [AlwaysUpdateSystem]
     public class StDefaultCharacterCameraSystem : ComponentSystem
     {
         [Inject] private Group m_Group;
@@ -21,10 +22,16 @@ namespace package.stormium.def
         {
             if (Application.isFocused && Input.GetMouseButtonDown(1)
                                       && Cursor.lockState != CursorLockMode.Locked)
+            {
+                Cursor.visible = false;
                 Cursor.lockState = CursorLockMode.Locked;
+            }
 
             if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                Cursor.visible = true;
                 Cursor.lockState = CursorLockMode.None;
+            }
 
             for (var i = 0; i != m_Group.Length; i++)
             {
@@ -71,11 +78,11 @@ namespace package.stormium.def
                     Time.deltaTime * distance * 10);
 
                 // Todo: move that
-                head.RotationY += Input.GetAxisRaw("Mouse Y") * 0.9f;
-                head.RotationY =  math.clamp(head.RotationY, -90, 90);
+                //head.RotationY += Input.GetAxisRaw("Mouse Y") * 0.9f;
+                //head.RotationY =  math.clamp(head.RotationY, -90, 90);
 
                 target.PositionOffset = head.Position;
-                target.RotationOffset = Vector3.left * head.RotationY;
+                //target.RotationOffset = Vector3.left * head.RotationY;
 
                 var velocityLocal = transform.InverseTransformDirection(velocity);
                 var roll = velocityLocal.x;
@@ -84,8 +91,8 @@ namespace package.stormium.def
                 
                 target.RotationOffset.z -= (velocityLocal.x) * 0.01f;
                 
-                m_Group.Heads[i]   = head;
-                m_Group.Targets[i] = target;
+                PostUpdateCommands.SetComponent(m_Group.Entities[i], head);
+                PostUpdateCommands.SetComponent(m_Group.Entities[i], target);
             }
 
             World.Active.GetExistingManager<StCharacterCameraSystem>().Update();
@@ -116,10 +123,11 @@ namespace package.stormium.def
 
         private struct Group
         {
+            public EntityArray Entities;
             public TransformAccessArray                   Transforms;
             public ComponentDataArray<StCharacter>        Characters;
-            public ComponentDataArray<DefStCharacterHead> Heads;
-            public ComponentDataArray<CameraTargetData>   Targets;
+            public ComponentDataArray<StEntityHeadLookAt> Heads;
+            public ComponentDataArray<oldCameraTargetData>   Targets;
             public ComponentDataArray<DefStMvInformation> Informations;
             public ComponentDataArray<DefStVelocity> Velocities;
 

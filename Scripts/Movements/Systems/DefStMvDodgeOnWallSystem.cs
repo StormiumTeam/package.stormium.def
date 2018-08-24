@@ -52,24 +52,23 @@ namespace package.stormium.def
                     direction.y = 0;
 
                     controller.enabled = false;
-
+                    
                     var castResult = UtilityWallRayTrace.RayTrace
                     (
-                        ref direction, ref worldCenter, ref radius, ref skinWidth, ref height, ref substractHeight
+                        ref direction, ref worldCenter, ref radius, ref skinWidth, ref height, ref substractHeight, controller
                     );
 
                     controller.enabled = true;
 
                     var finalHeight = height - substractHeight;
                     var lowPoint    = worldCenter - new Vector3(0, finalHeight * 0.5f, 0);
-                    if (castResult.normal != Vector3.zero
-                        && castResult.normal.y < 0.01f)
+                    if (castResult.normal != Vector3.zero)
                     {
                         var velocity = velocityData.Velocity;
                         var oldY     = velocity.y;
                         var dodgeDir = castResult.normal;
 
-                        Debug.DrawRay(castResult.point, castResult.normal, Color.red, 20f);
+                        Debug.DrawRay(worldCenter, castResult.normal, Color.red, 20f);
 
                         var lerpT = Mathf.Clamp(Vector3.Distance(dodgeDir, direction) * 0.5f, 0f, 0.5f);
                         //lerpT = 0f;
@@ -78,7 +77,12 @@ namespace package.stormium.def
                         dodgeDir.y *= 0f;
                         dodgeDir.Normalize();
 
-                        velocity += dodgeDir * (velocity.ToGrid(1).magnitude + dodgeSetting.AdditiveForce);
+                        //velocity += dodgeDir * (velocity.ToGrid(1).magnitude + dodgeSetting.AdditiveForce);
+                        var dirNorm = currVel;
+                        var reflectDirArg = Vector3.Lerp(dirNorm, dodgeDir, dirNorm.magnitude - Vector3.Distance(dirNorm, dodgeDir)) * 0.5f;
+                        
+                        //velocity += Vector3.Reflect(reflectDirArg, dodgeDir) * 4;
+                        velocity += reflectDirArg + (dodgeDir * 1.5f * Mathf.Clamp(dirNorm.magnitude, 6, 12));
 
                         var oldVelocity = velocity;
 
@@ -114,9 +118,12 @@ namespace package.stormium.def
 
                 // I could have used the SET from the indexer, but sometime it throw some errors...
                 // (as if the array was deallocated???)
-                EntityManager.SetComponentData(entity, stamina);
-                EntityManager.SetComponentData(entity, wallDodge);
-                EntityManager.SetComponentData(entity, velocityData);
+                input.WallDodge = 0;
+                
+                PostUpdateCommands.SetComponent(entity, input);
+                PostUpdateCommands.SetComponent(entity, stamina);
+                PostUpdateCommands.SetComponent(entity, wallDodge);
+                PostUpdateCommands.SetComponent(entity, velocityData);
             }
         }
 

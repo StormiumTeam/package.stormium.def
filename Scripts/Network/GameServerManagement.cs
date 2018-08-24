@@ -17,6 +17,7 @@ namespace package.stormium.def.Network
         public GameServer       Main;
         public List<GameServer> ConnectedServers;
         public bool             IsCurrentlyHosting => Main?.ServerInstance.SelfHost ?? false;
+        public bool ServerReady => Main?.ServerInstance.PeerInstance.ServerReady ?? false;
 
         protected override void OnCreateManager(int capacity)
         {

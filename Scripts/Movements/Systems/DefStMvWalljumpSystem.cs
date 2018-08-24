@@ -55,7 +55,7 @@ namespace package.stormium.def
 
                     var castResult = UtilityWallRayTrace.RayTrace
                     (
-                        ref direction, ref worldCenter, ref radius, ref skinWidth, ref height, ref substractHeight
+                        ref direction, ref worldCenter, ref radius, ref skinWidth, ref height, ref substractHeight, controller
                     );
 
                     controller.enabled = true;
@@ -65,6 +65,8 @@ namespace package.stormium.def
                     if (castResult.normal != Vector3.zero
                         && castResult.normal.y < 0.01f)
                     {
+                        Debug.Log(castResult.normal);
+                        
                         var velocity = velocityData.Velocity;
                         var oldY     = velocity.y;
                         var dodgeDir = castResult.normal;

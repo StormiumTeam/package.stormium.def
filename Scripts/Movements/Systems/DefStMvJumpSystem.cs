@@ -1,10 +1,16 @@
 ﻿using package.stormiumteam.shared;
 using package.stormium.core;
+using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 
 namespace package.stormium.def
 {
+    public interface IDefStCharacterOnJump : IAppEvent
+    {
+        void CharacterOnJump(Entity entity);
+    }
+    
     [UpdateAfter(typeof(STUpdateOrder.UOMovementUpdate.Loop))]
     [UpdateBefore(typeof(STUpdateOrder.UOMovementUpdate.FixMovement))]
     [UpdateAfter(typeof(DefStMvGravitySystem))]
@@ -20,93 +26,107 @@ namespace package.stormium.def
 
         private void OnSimulationUpdate(float delta)
         {
-            for (var i = 0; i != m_Group.Length; i++)
+            using (var cmd = new EntityCommandBuffer(Allocator.Temp))
             {
-                var input  = m_Group.Inputs[i];
-                var comp   = m_Group.Components[i];
-                var state  = m_Group.States[i];
-                var motor  = m_Group.Motors[i];
-                var entity = m_Group.Entities[i];
-
-                var velocityData = m_Group.Velocities[i];
-
-                var gravity = Physics.gravity;
-                if (EntityManager.HasComponent<DefStMvGravity>(entity))
+                for (var i = 0; i != m_Group.Length; i++)
                 {
-                    var gravityComponent = EntityManager.GetComponentData<DefStMvGravity>(entity);
-                    gravity = gravityComponent.Mode == DefStMvGravity.GravityMode.Custom
-                        ? gravityComponent.Gravity
-                        : gravity;
-                }
+                    var input  = m_Group.Inputs[i];
+                    var comp   = m_Group.Components[i];
+                    var state  = m_Group.States[i];
+                    var motor  = m_Group.Motors[i];
+                    var entity = m_Group.Entities[i];
 
-                if (state.ActionStartTime < comp.MaxTimeBetweenJumps + 10)
-                    state.ActionStartTime += delta;
+                    var velocityData = m_Group.Velocities[i];
 
-                var doJump = input.Jump > 0
-                             &&
-                             (
-                                 motor.IsGrounded() ||
-                                 (state.CurrentCombo < comp.MaximumConsecutiveAirJump
-                                 && state.CurrentComboFromGround > 0
-                                 && state.ActionStartTime > comp.MinTimeBetweenJumps
-                                 && state.ActionStartTime < comp.MaxTimeBetweenJumps)
-                             );
-                /*if (input.Jump > 0
-                    && motor.IsGrounded())
-                {
-                    doJump = true;
-                }
-                else if (input.Jump > 0
-                         && state.CurrentCombo < comp.MaximumConsecutiveAirJump
-                         && state.ActionStartTime > comp.MinTimeBetweenJumps
-                         && state.ActionStartTime < comp.MaxTimeBetweenJumps)
-                {
-                    doJump = true;
-                }*/
-
-                if (motor.IsGrounded())
-                {
-                    state.ActionStartTime = 0;
-                    state.CurrentCombo    = 0;
-                    state.CurrentComboFromGround = 0;
-                }
-
-                if (doJump)
-                {
-                    state.ActionStartTime = 0;
-
-                    velocityData.Velocity.y =  Mathf.Max(0, velocityData.Velocity.y);
-                    velocityData.Velocity   += -gravity * comp.GravityComplementForce * comp.BaseVerticalForce;
-
-                    // Apply a little dash in the current direction
-                    if (!motor.IsGrounded())
+                    var gravity = Physics.gravity;
+                    if (EntityManager.HasComponent<DefStMvGravity>(entity))
                     {
-                        var direction = motor.transform.rotation * ((Vector3) input.RunDirection).normalized;
+                        var gravityComponent = EntityManager.GetComponentData<DefStMvGravity>(entity);
+                        gravity = gravityComponent.Mode == DefStMvGravity.GravityMode.Custom
+                            ? gravityComponent.Gravity
+                            : gravity;
+                    }
 
-                        // We don't want the player to instantly be in this direction
-                        direction = Vector3.Lerp(velocityData.Velocity.ToGrid(1).normalized, direction, 0.99f);
+                    if (state.ActionStartTime < comp.MaxTimeBetweenJumps + 10)
+                        state.ActionStartTime += delta;
 
-                        var previousY = velocityData.Velocity.y;
-                        var previousSpeed = velocityData.Velocity.ToGrid(1).magnitude;
-                        var predictedVelocity = velocityData.Velocity + direction.normalized;
-                        velocityData.Velocity += direction * (velocityData.Velocity.ToGrid(1).magnitude + 4);
-                        velocityData.Velocity = Vector3.ClampMagnitude
-                        (velocityData.Velocity.ToGrid(1),
-                            Mathf.Min(previousSpeed + 1, velocityData.Velocity.ToGrid(1).magnitude)
-                        );
-                        velocityData.Velocity = Vector3.Lerp(velocityData.Velocity, predictedVelocity, 0.1f);
-                        velocityData.Velocity.y =  previousY;
+                    var doJump = input.Jump > 0
+                                 &&
+                                 (
+                                     motor.IsGrounded() ||
+                                     (state.CurrentCombo < comp.MaximumConsecutiveAirJump
+                                      && state.CurrentComboFromGround > 0
+                                      && state.ActionStartTime > comp.MinTimeBetweenJumps
+                                      && state.ActionStartTime < comp.MaxTimeBetweenJumps)
+                                 );
+                    /*if (input.Jump > 0
+                        && motor.IsGrounded())
+                    {
+                        doJump = true;
+                    }
+                    else if (input.Jump > 0
+                             && state.CurrentCombo < comp.MaximumConsecutiveAirJump
+                             && state.ActionStartTime > comp.MinTimeBetweenJumps
+                             && state.ActionStartTime < comp.MaxTimeBetweenJumps)
+                    {
+                        doJump = true;
+                    }*/
+
+                    if (motor.IsGrounded())
+                    {
+                        state.ActionStartTime        = 0;
+                        state.CurrentCombo           = 0;
+                        state.CurrentComboFromGround = 0;
+                    }
+
+                    if (doJump)
+                    {
+                        state.ActionStartTime = 0;
+
+                        velocityData.Velocity.y =  Mathf.Max(0, velocityData.Velocity.y);
+                        velocityData.Velocity   += -gravity * comp.GravityComplementForce * comp.BaseVerticalForce;
+
+                        // Apply a little dash in the current direction
+                        if (!motor.IsGrounded())
+                        {
+                            var direction = motor.transform.rotation * ((Vector3) input.RunDirection).normalized;
+
+                            // We don't want the player to instantly be in this direction
+                            direction = Vector3.Lerp(velocityData.Velocity.ToGrid(1).normalized, direction, 0.99f);
+
+                            var previousY         = velocityData.Velocity.y;
+                            var previousSpeed     = velocityData.Velocity.ToGrid(1).magnitude;
+                            var predictedVelocity = velocityData.Velocity + direction.normalized;
+                            velocityData.Velocity += direction * (velocityData.Velocity.ToGrid(1).magnitude + 2);
+                            velocityData.Velocity = Vector3.ClampMagnitude
+                            (velocityData.Velocity.ToGrid(1),
+                                Mathf.Min(previousSpeed + 1, velocityData.Velocity.ToGrid(1).magnitude)
+                            );
+                            velocityData.Velocity   = Vector3.Lerp(velocityData.Velocity, predictedVelocity, 0.1f);
+                            velocityData.Velocity.y = previousY;
+
+                            state.CurrentCombo++;
+                        }
+                        else
+                        {
+                            state.CurrentComboFromGround++;
+                        }
                         
-                        state.CurrentCombo++;
+                        foreach (var manager in AppEvent<IDefStCharacterOnJump>.eventList)
+                        {
+                            AppEvent<IDefStCharacterOnJump>.Caller = this;
+                            manager.CharacterOnJump(entity);
+                        }
                     }
-                    else
-                    {
-                        state.CurrentComboFromGround++;
-                    }
+
+                    input.Jump = 0;
+
+                    cmd.SetComponent(entity, input);
+                    cmd.SetComponent(entity, state);
+                    cmd.SetComponent(entity, velocityData);
                 }
                 
-                m_Group.States[i]     = state;
-                m_Group.Velocities[i] = velocityData;
+                cmd.Playback(EntityManager);
             }
         }
 

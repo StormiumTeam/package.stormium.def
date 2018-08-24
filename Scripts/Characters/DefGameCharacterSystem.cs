@@ -4,7 +4,6 @@ using System.Text;
 using DefaultNamespace;
 using LiteNetLib;
 using LiteNetLib.Utils;
-using OdinSerializer;
 using package.stormium.def.Network;
 using package.stormiumteam.networking;
 using package.stormiumteam.networking.ecs;
@@ -13,6 +12,7 @@ using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Profiling;
+using Object = UnityEngine.Object;
 
 namespace package.stormium.def.characters
 {
@@ -58,6 +58,7 @@ namespace package.stormium.def.characters
 
         public static MessageIdent MsgSetCharacterTag;
         public static MessageIdent MsgSetPlayerOwner;
+        public static MessageIdent MsgDestroyCharacter;
 
         [Inject] private MsgIdRegisterSystem  m_MsgIdRegisterSystem;
         [Inject] private NetworkMessageSystem m_NetworkMessageSystem;
@@ -243,6 +244,49 @@ namespace package.stormium.def.characters
             );
             Profiler.EndSample();
             Profiler.EndSample();
+        }
+
+        public void DestroyCharacter(Entity entity)
+        {
+            ServerGlobalBroadcastDestroyCharacter(entity);
+            
+            if (EntityManager.HasComponent<Transform>(entity))
+            {
+                Object.Destroy(EntityManager.GetComponentObject<Transform>(entity).gameObject);
+            }
+            else
+                EntityManager.DestroyEntity(entity);
+        }
+        
+        public void ServerGlobalBroadcastDestroyCharacter(Entity entity)
+        {
+            NetworkInstance serverInstance;
+            if (!m_GameServerManagement.TryGetHostOrError(out serverInstance)) return;
+
+            foreach (var peer in m_GameServerManagement.Main.LocalNetManager)
+            {
+                ServerBroadcastDestroyCharacter(entity, serverInstance, peer);
+            }
+        }
+        
+        public void ServerBroadcastDestroyCharacter
+        (
+            Entity          entity,
+            NetworkInstance server,
+            NetPeer         receiver
+        )
+        {
+            var connectionMessageSystem = server.GetMessageManager();
+            var dataWriter = connectionMessageSystem.Create(MsgDestroyCharacter);
+            dataWriter.Put(entity);
+
+            m_NetworkMessageSystem.InstantSendTo
+            (
+                receiver,
+                null,
+                dataWriter,
+                DeliveryMethod.ReliableOrdered
+            );
         }
     }
 }

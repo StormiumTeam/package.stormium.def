@@ -25,7 +25,7 @@ namespace package.stormium.def
             Value = new DefStMvDodgeOnWall
             {
                 StaminaUse = 0.25f,
-                VerticalBump = 0.285f,
+                VerticalBump = 0.1f,
                 MaximalSpeed = 15f
             };
         }
