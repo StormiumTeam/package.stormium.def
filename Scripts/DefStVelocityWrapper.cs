@@ -11,13 +11,12 @@ namespace package.stormium.def
         /// <summary>
         ///     (Read-only) The concrete velocity is only used for visual and debugging
         /// </summary>
-        public Vector3 Velocity;
+        public Vector3 Value;
 
-        /*public DefStVelocity(Vector3 concreteVelocity, Vector3 dynamicVelocity = default(Vector3))
+        public DefStVelocity(Vector3 velocity)
         {
-            this.ConcreteVelocity = concreteVelocity;
-            this.DynamicVelocity = dynamicVelocity;
-        }*/
+            Value = velocity;
+        }
     }
 
     public class DefStVelocityWrapper : BetterComponentWrapper<DefStVelocity>

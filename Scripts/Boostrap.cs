@@ -8,11 +8,7 @@ namespace package.stormium.def
     {
         protected override void OnRegister()
         {
-            // Create systems
-            Register<DefStMvRunInputSystem>();
-            Register<DefStMvRunSystem>();
-            Register<StEntityHeadLookAtSystem>();
-            Register<StDefaultCharacterCameraSystem>();
+            
         }
 
         protected override void OnUnregister()

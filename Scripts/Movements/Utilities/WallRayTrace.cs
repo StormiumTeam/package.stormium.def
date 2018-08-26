@@ -1,4 +1,5 @@
-﻿using package.stormiumteam.shared;
+﻿using System;
+using package.stormiumteam.shared;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -69,8 +70,9 @@ namespace package.stormium.def.Utilities
                 var referencable = ReferencableGameObject.GetComponent<ReferencableGameObject>(overlap.gameObject);
                 // We get the result from trying to get the BSPTree component
                 var meshGetResult = referencable.GetComponentFast<MeshCollider>();
-                if (!meshGetResult.HadIt) //< Verify it there is a BSPTree on this component
+                if (!meshGetResult.HasValue) //< Verify it there is a BSPTree on this component
                     continue;
+                MeshCollider meshCollider = meshGetResult;
 
                 using (var request = CPhysicTracer.Active.Get<CapsuleCollider>())
                 {
@@ -80,7 +82,7 @@ namespace package.stormium.def.Utilities
                     collider.transform.position = startPosition;
                     
                     if (Physics.ComputePenetration(collider, startPosition, Quaternion.identity,
-                        meshGetResult.Value, meshGetResult.Value.transform.position, meshGetResult.Value.transform.rotation,
+                        meshCollider, meshCollider.transform.position, meshCollider.transform.rotation,
                         out nearestNormal, out distance))
                     {
                         Debug.Log("Computed: " + distance);

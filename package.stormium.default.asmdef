@@ -4,6 +4,8 @@
         "package.guerro.shared",
         "package.stormium.core",
         "package.stormiumteam.networking",
+        "package.stormiumteam.inputs",
+        "Unity.InputSystem",
         "Unity.Entities",
         "Unity.Entities.Hybrid",
         "Unity.Transforms",
