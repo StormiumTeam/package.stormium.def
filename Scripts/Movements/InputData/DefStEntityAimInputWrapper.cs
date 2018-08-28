@@ -8,7 +8,12 @@ namespace package.stormium.def
     [Serializable]
     public struct DefStEntityAimInput : IComponentData
     {
-        public Quaternion Rotation;
+        public Vector2 Aim;
+
+        public DefStEntityAimInput(Vector2 aim)
+        {
+            Aim = aim;
+        }
     }
 
     public class DefStEntityAimInputWrapper : BetterComponentWrapper<DefStEntityAimInput>
@@ -17,7 +22,7 @@ namespace package.stormium.def
         {
             Value = new DefStEntityAimInput
             {
-                Rotation = Quaternion.identity,
+                Aim = Vector2.zero,
             };
         }
 
@@ -25,7 +30,7 @@ namespace package.stormium.def
         private void OnDrawGizmos()
         {
             Gizmos.color = Color.blue;
-            Gizmos.DrawRay(transform.position, Value.Rotation.eulerAngles.normalized);
+            //Gizmos.DrawRay(transform.position, Value.Rotation.eulerAngles.normalized);
             //Gizmos.color = Color.green;
             //Gizmos.DrawRay(Value.Position, new Vector3(0, Value.RotationY, 0));
             Gizmos.color = Color.black;

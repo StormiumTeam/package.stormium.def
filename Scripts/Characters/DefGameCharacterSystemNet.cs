@@ -1,5 +1,5 @@
 ﻿using System;
-using DefaultNamespace;
+using package.stormiumteam.networking.plugins;
 using LiteNetLib.Utils;
 using package.stormium.def.Network;
 using package.stormiumteam.networking;

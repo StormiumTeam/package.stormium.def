@@ -1,21 +1,16 @@
-﻿using System;
-using package.stormiumteam.networking.plugins;
-using LiteNetLib;
+﻿using LiteNetLib;
 using LiteNetLib.Utils;
-using package.stormium.def.Movements.Data;
-using package.stormium.def.Network;
 using package.stormiumteam.networking;
 using package.stormiumteam.networking.ecs;
 using package.stormiumteam.networking.plugins;
 using package.stormiumteam.shared;
 using Unity.Entities;
-using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Experimental.Input;
 
 namespace package.stormium.def.Movements.Systems
 {
-    public class DefStGroundRunManageInputSystem : GameComponentSystem,
+    public class DefStEntityAimManageInputSystem : GameComponentSystem,
                                                    EventReceiveData.IEv
     {
         private static readonly MessageIdent InputMsgToServerId;
@@ -23,9 +18,10 @@ namespace package.stormium.def.Movements.Systems
 
         struct Group
         {
-            public ComponentDataArray<StCharacter>   Characters;
-            public ComponentDataArray<NetworkEntity> NetworkEntities;
-            public ComponentDataArray<DefStGroundRunInput> Inputs;
+            public ComponentDataArray<StCharacter>         Characters;
+            public ComponentDataArray<NetworkEntity>       NetworkEntities;
+            public ComponentDataArray<DefStEntityAimInput> Inputs;
+            //public ComponentDataArray<WeOwnThisEntity> OwnedEntities;
 
             public readonly int Length;
         }
@@ -34,19 +30,36 @@ namespace package.stormium.def.Movements.Systems
 
         [Inject] private NetworkMessageSystem m_NetworkMessageSystem;
 
-        private DefStGroundRunManageInputClient m_InputClient;
+        private DefStEntityAimManageInputClient m_InputClient;
 
+        public float Sensivity = 3f;
+        
         protected override void OnCreateManager(int capacity)
         {
             base.OnCreateManager(capacity);
 
-            m_InputClient = new DefStGroundRunManageInputClient();
+            m_InputClient = new DefStEntityAimManageInputClient();
             m_InputClient.CreateActionMap();
             m_InputClient.Enable();
         }
  
         protected override void OnUpdate()
         {
+            if (Input.GetKeyDown(KeyCode.KeypadPlus))
+            {
+                Sensivity++;
+            }
+
+            if (Input.GetKeyDown(KeyCode.KeypadMinus))
+            {
+                Sensivity--;
+            }
+
+            if (Input.GetKeyDown(KeyCode.KeypadMultiply))
+            {
+                Sensivity = 3f;
+            }
+            
             var currentInput = m_InputClient.CurrentInput;
             for (int i = 0; i != m_Group.Length; i++)
             {
@@ -55,22 +68,28 @@ namespace package.stormium.def.Movements.Systems
                 InputPacket packet;
                 if (GameServerManagement.IsCurrentlyHosting)
                 {
-                    packet = new InputPacket(netEntity.ToEntity(), m_Group.Inputs[i].Direction)
-                    {
-                        Timestamp = m_Group.Inputs[i].Timestamp
-                    };
+                    packet = new InputPacket(netEntity.ToEntity(), m_Group.Inputs[i].Aim);
 
                     SendNewInputToClients(netEntity.GetNetworkInstance(), packet);   
                 }
                 else
                 {
-                    packet = new InputPacket(netEntity.ToEntity(), currentInput.Direction);
+                    var previousRotation = m_Group.Inputs[i].Aim;
+
+                    currentInput = new Vector2(-Input.GetAxisRaw("Mouse Y"), Input.GetAxisRaw("Mouse X")) * Sensivity;
+                    
+                    var newRotation = previousRotation + currentInput;
+                    newRotation.x = Mathf.Clamp(newRotation.x, -89f, 89f);
+                    newRotation.y = newRotation.y % 360;
+                    
+                    packet = new InputPacket(netEntity.ToEntity(), newRotation);
 
                     SendNewInputToServer(netEntity, packet);
 
-                    m_Group.Inputs[i] = new DefStGroundRunInput(packet.Timestamp, packet.Direction);
+                    m_Group.Inputs[i] = new DefStEntityAimInput(packet.Aim);
                 }
-            }
+            } 
+            m_InputClient.ToZero();
         }
 
         protected override void OnDestroyManager()
@@ -98,9 +117,9 @@ namespace package.stormium.def.Movements.Systems
                     return;
                 }
 
-                if (entity.HasComponent<DefStGroundRunInput>())
+                if (entity.HasComponent<DefStEntityAimInput>())
                 {
-                    entity.SetComponentData(new DefStGroundRunInput(inputPacket.Timestamp, inputPacket.Direction));
+                    entity.SetComponentData(new DefStEntityAimInput(inputPacket.Aim));
                 }
                 else
                 {
@@ -122,10 +141,10 @@ namespace package.stormium.def.Movements.Systems
 
                 entity = conEntityMgr.GetEntity(entity);
 
-                if (entity.HasComponent<DefStGroundRunInput>())
+                if (entity.HasComponent<DefStEntityAimInput>())
                 {
-                    /*if (!entity.HasComponent<DataIgnoreServerOperation<DefStGroundRunInput>>())
-                        entity.SetComponentData(new DefStGroundRunInput(inputPacket.Timestamp, inputPacket.Direction));*/
+                    /*if (!entity.HasComponent<DataIgnoreServerOperation<DefStEntityAimInput>>())
+                        entity.SetComponentData(new DefStEntityAimInput(inputPacket.Rotation));*/
                 }
                 else
                 {
@@ -142,7 +161,7 @@ namespace package.stormium.def.Movements.Systems
 
             packet.WriteTo(msgData);
 
-            m_NetworkMessageSystem.InstantSendToAllDefault(entity.GetNetworkInstance(), msgData, DeliveryMethod.ReliableUnordered);
+            m_NetworkMessageSystem.InstantSendToAllDefault(entity.GetNetworkInstance(), msgData, DeliveryMethod.Unreliable);
         }
 
         private void SendNewInputToClients(NetworkInstance caller, InputPacket packet)
@@ -151,51 +170,52 @@ namespace package.stormium.def.Movements.Systems
             var msgData = msgMgr.Create(InputMsgToClientsId);
             packet.WriteTo(msgData);
 
-            m_NetworkMessageSystem.InstantSendToAllDefault(caller, msgData, DeliveryMethod.ReliableUnordered);
+            m_NetworkMessageSystem.InstantSendToAllDefault(caller, msgData, DeliveryMethod.Unreliable);
         }
-        
+
         public struct InputPacket
         {
-            public float  Timestamp;
-            public Entity Entity;
-            public float2 Direction;
+            public Entity  Entity;
+            public Vector2 Aim;
 
-            public InputPacket(Entity entity, float2 direction)
+            public InputPacket(Entity entity, Vector2 aim)
             {
-                Timestamp = Time.time;
-                Entity    = entity;
-                Direction = direction;
+                Entity = entity;
+                Aim    = aim;
             }
 
             public InputPacket(NetDataReader reader)
             {
-                Timestamp = reader.GetFloat();
-                Entity    = reader.GetEntity();
-                Direction = reader.GetVec2();
+                Entity = reader.GetEntity();
+                var x = reader.GetFloat();
+                var y = reader.GetFloat();
+                Aim = new Vector2(x, y);
             }
 
             public void WriteTo(NetDataWriter writer)
             {
-                writer.Put(Timestamp);
                 writer.Put(Entity);
-                writer.Put(Direction);
+                writer.Put(Aim.x);
+                writer.Put(Aim.y);
             }
         }
     }
 
-    public class DefStGroundRunManageInputClient
+    public class DefStEntityAimManageInputClient
     {
-        public DefStGroundRunInput CurrentInput;
+        public Vector2 CurrentInput;
         public InputAction   MoveAction;
 
+        private int m_LastFrame;
+
         public void CreateActionMap()
-        {
-            MoveAction = new InputAction("move", expectedControlLayout: "Stick");
-            MoveAction.AppendCompositeBinding("Dpad")
-                      .With("Left", "<Keyboard>/a")
+        {            
+            MoveAction = new InputAction("look", "<Mouse>/delta");
+            /*MoveAction.AppendCompositeBinding("Dpad")
+                      .With("Left", "<Mouse>/a")
                       .With("Right", "<Keyboard>/d")
                       .With("Up", "<Keyboard>/w")
-                      .With("Down", "<Keyboard>/s");
+                      .With("Down", "<Keyboard>/s");*/
         }
 
         public void Enable()
@@ -210,9 +230,19 @@ namespace package.stormium.def.Movements.Systems
             MoveAction.performed -= MoveActionOnPerformed;
         }
 
+        /// <summary>
+        /// Reset the input to zero
+        /// </summary>
+        public void ToZero()
+        {
+            // We actually need to do that as MoveAction is performed multiple time (which is good tbh, as there can be multiple inputs per frame)
+            CurrentInput = Vector2.zero;
+        }
+        
         private void MoveActionOnPerformed(InputAction.CallbackContext context)
         {
-            CurrentInput = new DefStGroundRunInput(context.ReadValue<Vector2>());
+            var ctxInput = context.ReadValue<Vector2>();
+            CurrentInput += new Vector2(-ctxInput.y, ctxInput.x);
         }
     }
 }

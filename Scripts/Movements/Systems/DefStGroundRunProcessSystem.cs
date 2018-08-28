@@ -21,20 +21,19 @@ namespace package.stormium.def.Movements.Systems
             public readonly int Length;
         }
 
-        [Inject] private PhysicUpdaterGroup m_PhysicFrames;
+        [Inject] private PhysicUpdaterSystem m_PhysicUpdaterSystem;
         [Inject] private Group m_Group;
 
         protected override void OnUpdate()
         {
-            for (int frameIndex = 0; frameIndex != m_PhysicFrames.Length; frameIndex++)
+            for (int frameIndex = 0; frameIndex != m_PhysicUpdaterSystem.LastIterationCount; frameIndex++)
             {
-                SimulatePhysicStep(m_PhysicFrames[frameIndex]);
+                SimulatePhysicStep(m_PhysicUpdaterSystem.LastFixedTimeStep);
             }
         }
 
-        private void SimulatePhysicStep(PhysicFrameData physicFrameData)
+        private void SimulatePhysicStep(float dt)
         {
-            var dt = physicFrameData.Delta;
             for (int i = 0; i != m_Group.Length; i++)
             {
                 var velocityData = m_Group.Velocities[i];
@@ -42,12 +41,17 @@ namespace package.stormium.def.Movements.Systems
                 var motor        = m_Group.Motors[i];
                 var settings     = m_Group.Settings[i];
 
-                if (!motor.IsGrounded()) continue;
+                //if (!motor.IsGrounded()) continue;
+
+                if (float.IsNaN(velocityData.Value.x)) velocityData.Value.x = 0f;
+                if (float.IsNaN(velocityData.Value.y)) velocityData.Value.y = 0f;
+                if (float.IsNaN(velocityData.Value.z)) velocityData.Value.z = 0f;
 
                 var direction   = SrtComputeDirection(motor.transform.rotation, input.Direction);
                 var newVelocity = SrtMove(velocityData.Value, direction, settings, dt);
-                
-                m_Group.Velocities[i] = new DefStVelocity(newVelocity);
+                newVelocity.y = velocityData.Value.y;
+
+                m_Group.Velocities[i] = new DefStVelocity((Vector3)newVelocity);
             }
         }
         
@@ -61,7 +65,7 @@ namespace package.stormium.def.Movements.Systems
         /// <param name="worldRotation">The character rotation</param>
         /// <param name="inputDirection">The direction input</param>
         /// <returns>The new direction</returns>
-        private static float3 SrtComputeDirection(UnityEngine.Quaternion worldRotation, float2 inputDirection)
+        private static float3 SrtComputeDirection(Quaternion worldRotation, float2 inputDirection)
         {
             return math.normalize(worldRotation * new Vector3(inputDirection.x, 0, inputDirection.y));
         }
@@ -76,6 +80,11 @@ namespace package.stormium.def.Movements.Systems
         /// <returns>Return the new position</returns>
         private static float3 SrtMove(float3 initialVelocity, float3 direction, DefStGroundRunSettings settings, float dt)
         {
+            for (int i = 0; i != 3; i++)
+            {
+                if (float.IsNaN(direction[i])) direction[i] = 0f;
+            }
+
             // Set Y axe to zero
             initialVelocity.y = 0;
             
@@ -89,14 +98,19 @@ namespace package.stormium.def.Movements.Systems
 
             var velocity = SrtApplyFriction(initialVelocity, friction, settings.SurfaceFriction, settings.Acceleration, settings.Deacceleration, dt);
             var wishSpeed = math.length(direction) * settings.BaseSpeed;
-            var strafePower = math.max(friction * 0.5f, 0.1f);
+            if (float.IsNaN(wishSpeed)) wishSpeed = 0;
+
+            var strafeAngleNormalized = SrtGetStrafeAngleNormalized(direction, math.normalize(initialVelocity));
+            var strafePower = math.max(friction * 0.5f * (1 - strafeAngleNormalized), 0.1f);
 
             if (wishSpeed > settings.BaseSpeed && wishSpeed < currentSpeed)
             {
                 wishSpeed = math.lerp(currentSpeed, wishSpeed, math.max(math.distance(wishSpeed, currentSpeed), 0) * dt);
             }
 
-            return SrtAccelerate(velocity, direction, wishSpeed, settings.Acceleration, strafePower, dt);
+            velocity = SrtAccelerate(velocity, direction, wishSpeed, settings.Acceleration, strafePower, dt);
+            
+            return velocity;
         }
 
         /// <summary>
@@ -112,9 +126,14 @@ namespace package.stormium.def.Movements.Systems
         {
             return Mathf.Clamp
             (
-                frictionMin / Mathf.Clamp(speed, frictionSpeedMin, frictionSpeedMax),
+                frictionSpeedMin / Mathf.Clamp(speed, frictionSpeedMin, frictionSpeedMax),
                 frictionMin, frictionMax
             );
+        }
+
+        private static float SrtGetStrafeAngleNormalized(Vector3 direction, Vector3 velocityDirection)
+        {
+            return math.min(math.clamp(Vector3.Angle(direction, velocityDirection), 1, 90) / 90, 0f);
         }
 
         /// <summary>
@@ -158,6 +177,8 @@ namespace package.stormium.def.Movements.Systems
                 return velocity;
 
             var accelSpeed = math.min(accelPower * dt * wishSpeed, addSpeed);
+            if (float.IsNaN(accelSpeed))
+                accelSpeed = 0f;
 
             return velocity + (accelSpeed * wishDirection);
         }

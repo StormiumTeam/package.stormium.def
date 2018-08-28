@@ -44,12 +44,12 @@ namespace package.stormium.def.Movements.Systems
                 var input    = m_Group.Inputs[i];
                 var motor = m_Group.Motors[i];
 
-                if (!ProcessItem(ref entity, ref velocity, ref setting, ref input, motor))
-                    continue;
+                if (!ProcessItem(ref entity, ref velocity, ref setting, ref input, motor)) ;
+                    //continue;
 
                 PostUpdateCommands.SetComponent(entity, velocity);
-                PostUpdateCommands.SetComponent(setting);
-                PostUpdateCommands.SetComponent(input);
+                PostUpdateCommands.SetComponent(entity, setting);
+                PostUpdateCommands.SetComponent(entity, input);
             }
         }
 
@@ -62,18 +62,31 @@ namespace package.stormium.def.Movements.Systems
             CharacterControllerMotor motor
         )
         {
-            var doJump = input.State != InputState.None;
+            var doJump = input.State != InputState.None && motor.IsGrounded();
+
+            if (input.TimeBeforeResetState <= 0f)
+            {
+                input.State = InputState.None;
+            }
+
+            input.TimeBeforeResetState -= Time.deltaTime;
+
             if (!doJump)
                 return false;
 
             var gravity = GetGravity(entity, setting);
             
             var doAirJump = input.State == InputState.Down;
-            if (motor.IsGrounded())
-                velocity.Value += gravity * setting.JumpPower;
+            velocity.Value.y = 0f;
+            velocity.Value -= gravity * setting.JumpPower;
 
-            PostUpdateCommands.CreateEntity(m_ArchetypeEventOnCharacterJump);
-            PostUpdateCommands.SetComponent(new DefStOnCharacterJump(entity));
+            if (motor.IsGrounded()) motor.MoveBy(Vector3.up * 0.01f);
+
+            /*PostUpdateCommands.CreateEntity(m_ArchetypeEventOnCharacterJump);
+            PostUpdateCommands.SetComponent(new DefStOnCharacterJump(entity));*/
+
+            input.TimeBeforeResetState = -1f;
+            input.State = InputState.None;
 
             return true;
         }

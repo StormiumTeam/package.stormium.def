@@ -1,7 +1,7 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Text;
-using DefaultNamespace;
+using package.stormiumteam.networking.plugins;
 using LiteNetLib;
 using LiteNetLib.Utils;
 using package.stormium.def.Network;

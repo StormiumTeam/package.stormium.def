@@ -1,4 +1,5 @@
-﻿using DefaultNamespace;
+﻿using System;
+using package.stormiumteam.networking.plugins;
 using LiteNetLib;
 using package.stormiumteam.networking;
 using package.stormiumteam.networking.ecs;
@@ -10,7 +11,6 @@ using Unity.Transforms;
 using UnityEngine;
 using UnityEngine.Experimental.PlayerLoop;
 using UnityEngine.Jobs;
-using Quaternion = UnityEngine.Quaternion;
 
 namespace package.stormium.def.Network
 {
@@ -42,20 +42,37 @@ namespace package.stormium.def.Network
             public ComponentDataArray<Position>                                Local;
             public ComponentDataArray<NetPosition>                             Network;
             public SubtractiveComponent<VoidSystem<DefaultNetTransformSystem>> Void1;
-            public SubtractiveComponent<NetSnapshotPosition> Sub1;
-            public TransformAccessArray Trs;
+            public SubtractiveComponent<NetSnapshotPosition>                   Sub1;
+            public SubtractiveComponent<NetPositionInterpolator>               Sub2;
+            public SubtractiveComponent<NetPositionInterpolatorBuffer>         Sub3;
+            public TransformAccessArray                                        Trs;
 
             public readonly int Length;
         }
 
-        public struct DeltaPositionGroup
+        public struct PositionInterpolatorGroup
         {
             public ComponentDataArray<NetworkEntity>                           N1;
             public ComponentDataArray<Position>                                Local;
-            public ComponentDataArray<NetPosition> Predicted;
-            [ReadOnly] public SharedComponentDataArray<NetSnapshotPosition>               Network;
+            public ComponentDataArray<NetPosition>                             Network;
+            public ComponentDataArray<NetPositionInterpolator> Interpolator;
+            public BufferArray<NetPositionInterpolatorBuffer>                  BufferArray;
             public SubtractiveComponent<VoidSystem<DefaultNetTransformSystem>> Void1;
             public TransformAccessArray                                        Trs;
+
+            public readonly int Length;
+        }
+        
+        public struct PositionInterpolatorGroupWithoutBuffer
+        {
+            public ComponentDataArray<NetworkEntity>                           N1;
+            public ComponentDataArray<Position>                                Local;
+            public ComponentDataArray<NetPosition>                             Network;
+            public ComponentDataArray<NetPositionInterpolator>                 Interpolator;
+            public SubtractiveComponent<VoidSystem<DefaultNetTransformSystem>> Void1;
+            public SubtractiveComponent<NetPositionInterpolatorBuffer> Sub1;
+            public TransformAccessArray                                        Trs;
+            public EntityArray Entities;
 
             public readonly int Length;
         }
@@ -71,7 +88,8 @@ namespace package.stormium.def.Network
             public readonly int Length;
         }
 
-        [Inject] private DeltaPositionGroup m_DeltaPositionGroup;
+        [Inject] private PositionInterpolatorGroupWithoutBuffer m_WithoutBufferGroup;
+        [Inject] private PositionInterpolatorGroup m_BufferInterpolatorGroup;
         [Inject] private PositionGroup m_PositionGroup;
         [Inject] private RotationGroup m_RotationGroup;
         [Inject] private GameServerManagement m_Gms;
@@ -79,6 +97,15 @@ namespace package.stormium.def.Network
         protected override void OnUpdate()
         {
             var delta = Time.deltaTime;
+
+            var needToReinject = false;
+            for (int i = 0; i != m_WithoutBufferGroup.Length; i++)
+            {
+                EntityManager.AddBuffer<NetPositionInterpolatorBuffer>(m_WithoutBufferGroup.Entities[i]);
+                needToReinject = true;
+            }
+            if (needToReinject) UpdateInjectedComponentGroups();
+            
             for (int i = 0; i != m_PositionGroup.Length; i++)
             {
                 var localLocation  = m_PositionGroup.Local[i].Value;
@@ -98,24 +125,117 @@ namespace package.stormium.def.Network
                 m_PositionGroup.Local[i] = new Position {Value = localLocation};
                 m_PositionGroup.Trs[i].position = localLocation;
             }
-            
-            for (int i = 0; i != m_DeltaPositionGroup.Length; i++)
+
+            for (int i = 0; i != m_BufferInterpolatorGroup.Length; i++)
             {
-                var netDelta = m_DeltaPositionGroup.Network[i];
-                var predComp = m_DeltaPositionGroup.Predicted[i];
-                var history = netDelta.DeltaPositions;
+                const float cDelay = 0.01f;
 
-                predComp.DeltaProgress += delta;
+                var interpolator = m_BufferInterpolatorGroup.Interpolator[i];
+                var elemBuffer   = m_BufferInterpolatorGroup.BufferArray[i];
 
-                var latency = 15;
+                var target = m_BufferInterpolatorGroup.Trs[i];
 
-                var finalPosition = predComp.Predicted * latency * 0.05f;
-                var t = delta / (latency * (1 + 0.05f));
-                finalPosition = (finalPosition - m_DeltaPositionGroup.Local[i].Value) * Time.deltaTime;
+                //Update time
+                if (interpolator.CurrentTime >= 0f)
+                {
+                    //If we had time, we need to move forward by adding the delta time
+                    //From the last frame.
+                    interpolator.CurrentTime += delta;
+                }
 
-                m_DeltaPositionGroup.Local[i] = new Position {Value = finalPosition};
-                m_DeltaPositionGroup.Trs[i].position = finalPosition;
-                m_DeltaPositionGroup.Predicted[i] = predComp;
+                //If we have elements, we need to start the interpolation
+                if (elemBuffer.Length > 0)
+                {
+                    //This is E(n-1)
+                    var prev = elemBuffer[0];
+
+                    //If we don't have a time set, set the time to the oldest interp entry
+                    //The oldest entry is the first in the queue.
+                    if (interpolator.CurrentTime < 0f)
+                    {
+                        interpolator.CurrentTime = Math.Max(prev.Timestamp - cDelay, 0f);
+
+                        //Set the time this interpolation piece has started from
+                        interpolator.StartedTime = interpolator.CurrentTime;
+
+                        //Set starting points to interpolate from
+                        interpolator.StartingPosition = target.position;
+                    }
+
+                    //Current position is towards the first element of the queue
+                    //This means, since the first frame, the interpolation is still towards the first entry
+                    if (interpolator.CurrentTime < prev.Timestamp)
+                    {
+                        interpolator.TimeBetween       = prev.Timestamp - interpolator.StartedTime;
+                        interpolator.TimeSincePrevious = interpolator.CurrentTime - interpolator.StartedTime;
+
+                        if (Math.Abs(prev.Timestamp - interpolator.CurrentTime) > 0.1f
+                            || interpolator.TimeBetween > 0.1f
+                            || Mathf.Abs(interpolator.LatestTimestamp - interpolator.CurrentTime) > 0.1f)
+                        {
+                            interpolator = default(NetPositionInterpolator);
+                            interpolator.CurrentTime = prev.Timestamp;
+                            elemBuffer.Clear();
+                        }
+
+                        target.position = Vector3.Lerp(interpolator.StartingPosition, prev.Position, interpolator.TimeSincePrevious / interpolator.TimeBetween);
+                        m_BufferInterpolatorGroup.Local[i] = new Position {Value = target.position};
+                        m_BufferInterpolatorGroup.Interpolator[i] = interpolator;
+                        continue;
+                    }
+
+                    //This is E(n)
+                    var next = prev;
+
+                    //Find the first entry where the current time doesn't pass it.
+                    while (interpolator.CurrentTime > next.Timestamp && elemBuffer.Length > 0)
+                    {
+                        if (elemBuffer.Length == 1)
+                        {
+                            next = elemBuffer[0];
+                            elemBuffer.RemoveAt(0); // FIFO
+                            prev = next;
+                        }
+                        else
+                        {
+                            prev = elemBuffer[0];
+                            next = elemBuffer[1];
+                            
+                            elemBuffer.RemoveAt(0); // FIFO
+                        }
+                    }
+
+                    //Calculate T0+dt since prev instead of since begining
+                    interpolator.TimeBetween = interpolator.CurrentTime - prev.Timestamp;
+                    
+                    if (interpolator.TimeBetween > 0.1f)
+                    {
+                        interpolator = default(NetPositionInterpolator);
+                        interpolator.CurrentTime = prev.Timestamp;
+                        elemBuffer.Clear();
+                        
+                        target.position                    = Vector3.Lerp(prev.Position, next.Position, (interpolator.TimeSincePrevious / interpolator.TimeBetween));
+                        m_BufferInterpolatorGroup.Local[i] = new Position {Value = target.position};
+                        m_BufferInterpolatorGroup.Interpolator[i] = interpolator;
+
+                        continue;
+                    }
+
+                    if (interpolator.TimeBetween == 0)
+                    {
+                        interpolator.TimeBetween = 1;
+                        interpolator.TimeSincePrevious = 1;
+                    }
+
+                    //Return the interpolation of T0+dt in this piece
+                    target.position = Vector3.Lerp(prev.Position, next.Position, (interpolator.TimeSincePrevious / interpolator.TimeBetween));
+                    m_BufferInterpolatorGroup.Local[i] = new Position {Value = target.position};
+
+                    interpolator.StartedTime = interpolator.CurrentTime;
+                    interpolator.StartingPosition = prev.Position;
+
+                    m_BufferInterpolatorGroup.Interpolator[i] = interpolator;
+                }
             }
 
             for (int i = 0; i != m_RotationGroup.Length; i++)
@@ -193,6 +313,7 @@ namespace package.stormium.def.Network
                 
                 var msg = msgMgr.Create(DefaultNetTransformConstants.MsgUpdatePosition);
                 msg.Put(new Entity() { Index = netEntity.NetId,  Version = netEntity.NetVersion});
+                msg.Put(Time.time);
                 msg.Put(m_PositionGroup.Local[i].Value);
                 
                 manager.SendToAll(msg, DeliveryMethod.Unreliable);
@@ -226,16 +347,15 @@ namespace package.stormium.def.Network
             
             var msg = conMsgMgr.GetPattern(args.Reader);
             if (msg == DefaultNetTransformConstants.MsgUpdatePosition)
-            {
+            {                
                 var entity = conEntityMgr.GetEntity(args.Reader.GetEntity());
+                var timestamp = args.Reader.Data.GetFloat();
                 var position = args.Reader.Data.GetVec3();
 
                 if (!entity.HasComponent<NetSnapshotPosition>())
                 {
                     Vector3 oldPosition = entity.GetComponentData<NetPosition>().Target;
                     var movDir = (position - oldPosition).normalized * 0.003f;
-                    /*if ((position - oldPosition).magnitude < 0.1f)
-                        movDir = Vector3.zero;*/
                     
                     var predictedPosition = position + (movDir * args.PeerInstance.Get<ConnectionNetManagerConfig>().ConfigUpdateTime);
                     var oldProgress = entity.GetComponentData<NetPosition>().DeltaProgress;
@@ -245,6 +365,17 @@ namespace package.stormium.def.Network
                         Predicted = predictedPosition,
                         DeltaProgress = Mathf.Lerp(oldProgress, 0, 0.5f)
                     });
+
+                    if (entity.HasComponent<NetPositionInterpolatorBuffer>() && entity.HasComponent<NetPositionInterpolator>())
+                    {
+                        var bufferArray = EntityManager.GetBuffer<NetPositionInterpolatorBuffer>(entity);
+                        bufferArray.Add(new NetPositionInterpolatorBuffer(timestamp, Time.time, position));
+
+                        var interpolator = EntityManager.GetComponentData<NetPositionInterpolator>(entity);
+                        interpolator.LatestPosition = position;
+                        interpolator.LatestTimestamp = timestamp;
+                        EntityManager.SetComponentData(entity, interpolator);
+                    }
                 }
                 else
                 {
@@ -286,7 +417,7 @@ namespace package.stormium.def.Network
                 //var w = math.sqrt(1 - (x * x) - (y * y) - (z * z));
                 var w = args.Reader.Data.GetFloat();
 
-                entity.SetOrAddComponentData(new NetRotation() {Value = math.Quaternion(x, y, z, w)});
+                entity.SetOrAddComponentData(new NetRotation() {Value = math.quaternion(x, y, z, w)});
             }
         }
     }

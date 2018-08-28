@@ -1,8 +1,7 @@
 ﻿using System;
 using Unity.Entities;
-using UnityEngine;
 
-namespace package.stormium.def.Movements.Data
+namespace package.stormium.def
 {
     [Serializable]
     public struct DefStGroundRunSettings : IComponentData
