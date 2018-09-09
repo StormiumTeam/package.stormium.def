@@ -74,7 +74,7 @@ namespace package.stormium.def.Utilities
                     continue;
                 MeshCollider meshCollider = meshGetResult;
 
-                using (var request = CPhysicTracer.Active.Get<CapsuleCollider>())
+                using (var request = PhysicColletor.Active.Get<CapsuleCollider>())
                 {
                     var collider = request.Collider;
                     collider.radius = overlapRadius * 0.6f;

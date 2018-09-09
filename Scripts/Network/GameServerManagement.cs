@@ -39,7 +39,7 @@ namespace package.stormium.def.Network
 
             var connectionCreator = new NetworkSelfConnectionCreator()
             {
-                ManagerAddress = "127.0.0.1",
+                ManagerAddress = serverAddress,
                 ManagerPort    = (short) clientPort,
             };
 
@@ -51,6 +51,9 @@ namespace package.stormium.def.Network
                 out var conInstance);
 
             Main = GameServer.From(localInstance, conInstance);
+            Main.LocalNetManager.SimulateLatency = false;
+            Main.LocalNetManager.SimulationMinLatency = 0;
+            Main.LocalNetManager.SimulationMaxLatency = 0;
             ConnectedServers.Add(Main);
         }
 

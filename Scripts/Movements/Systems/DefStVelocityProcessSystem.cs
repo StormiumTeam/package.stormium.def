@@ -25,7 +25,7 @@ namespace package.stormium.def.Movements.Systems
         // -------------------------------------------------------- //
         struct VelocityGroup
         {
-            public ComponentDataArray<DefStVelocity> VelocityArray;
+            public ComponentDataArray<StVelocity> VelocityArray;
             public EntityArray Entities;
 
             public readonly int Length;
@@ -79,7 +79,7 @@ namespace package.stormium.def.Movements.Systems
 
             entity = conEntityMgr.GetEntity(entity);
                 
-            entity.SetComponentData(new DefStVelocity(packet.Velocity));
+            entity.SetOrAddComponentData(new StVelocity(packet.Velocity));
         }
 
         // -------------------------------------------------------- //

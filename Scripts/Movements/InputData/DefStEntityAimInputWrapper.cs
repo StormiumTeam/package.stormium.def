@@ -6,6 +6,18 @@ using UnityEngine;
 namespace package.stormium.def
 {
     [Serializable]
+    public struct DefStEntityAimClientInput : IComponentData
+    {
+        public Vector2 Aim;
+
+        public DefStEntityAimClientInput(Vector2 aim)
+        {
+            Aim = aim;
+        }
+    }
+
+    
+    [Serializable]
     public struct DefStEntityAimInput : IComponentData
     {
         public Vector2 Aim;

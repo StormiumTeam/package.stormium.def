@@ -11,7 +11,8 @@
         "Unity.Transforms",
         "Unity.Mathematics",
         "Unity.Collections",
-        "Unity.Jobs"
+        "Unity.Jobs",
+        "Unity.Burst"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

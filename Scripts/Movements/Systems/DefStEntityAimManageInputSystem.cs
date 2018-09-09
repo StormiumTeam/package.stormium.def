@@ -1,5 +1,6 @@
 ﻿using LiteNetLib;
 using LiteNetLib.Utils;
+using package.stormium.core;
 using package.stormiumteam.networking;
 using package.stormiumteam.networking.ecs;
 using package.stormiumteam.networking.plugins;
@@ -16,17 +17,32 @@ namespace package.stormium.def.Movements.Systems
         private static readonly MessageIdent InputMsgToServerId;
         private static readonly MessageIdent InputMsgToClientsId;
 
-        struct Group
+        struct NetworkGroup
         {
-            public ComponentDataArray<StCharacter>         Characters;
-            public ComponentDataArray<NetworkEntity>       NetworkEntities;
-            public ComponentDataArray<DefStEntityAimInput> Inputs;
-            //public ComponentDataArray<WeOwnThisEntity> OwnedEntities;
+            public ComponentDataArray<StCharacter>               Characters;
+            public ComponentDataArray<NetworkEntity>             NetworkEntities;
+            public ComponentDataArray<DefStEntityAimInput>       Inputs;
+            public ComponentDataArray<DefStEntityAimClientInput> ClientInputs;
+
+            public EntityArray Entities;
+
+            public readonly int Length;
+        }
+        
+        struct LocalGroup
+        {
+            public ComponentDataArray<StCharacter>               Characters;
+            public SubtractiveComponent<NetworkEntity>             NetworkEntities;
+            public ComponentDataArray<DefStEntityAimInput>       Inputs;
+            public ComponentDataArray<DefStEntityAimClientInput> ClientInputs;
+
+            public EntityArray Entities;
 
             public readonly int Length;
         }
 
-        [Inject] private Group m_Group;
+        [Inject] private NetworkGroup m_NetworkGroup;
+        [Inject] private LocalGroup m_LocalGroup;
 
         [Inject] private NetworkMessageSystem m_NetworkMessageSystem;
 
@@ -61,34 +77,39 @@ namespace package.stormium.def.Movements.Systems
             }
             
             var currentInput = m_InputClient.CurrentInput;
-            for (int i = 0; i != m_Group.Length; i++)
+            for (int i = 0; i != m_NetworkGroup.Length; i++)
             {
-                var netEntity = m_Group.NetworkEntities[i];
+                var netEntity = m_NetworkGroup.NetworkEntities[i];
 
                 InputPacket packet;
                 if (GameServerManagement.IsCurrentlyHosting)
                 {
-                    packet = new InputPacket(netEntity.ToEntity(), m_Group.Inputs[i].Aim);
+                    packet = new InputPacket(netEntity.ToEntity(), m_NetworkGroup.Inputs[i].Aim);
 
                     SendNewInputToClients(netEntity.GetNetworkInstance(), packet);   
                 }
                 else
                 {
-                    var previousRotation = m_Group.Inputs[i].Aim;
-
-                    currentInput = new Vector2(-Input.GetAxisRaw("Mouse Y"), Input.GetAxisRaw("Mouse X")) * Sensivity;
+                    if (!m_NetworkGroup.Entities[i].HasComponent<ClientDriveData<DefStEntityAimInput>>())
+                        continue;
                     
-                    var newRotation = previousRotation + currentInput;
-                    newRotation.x = Mathf.Clamp(newRotation.x, -89f, 89f);
-                    newRotation.y = newRotation.y % 360;
-                    
-                    packet = new InputPacket(netEntity.ToEntity(), newRotation);
-
+                    packet = new InputPacket(netEntity.ToEntity(), GetNewRotation(currentInput, m_NetworkGroup.ClientInputs[i].Aim));
                     SendNewInputToServer(netEntity, packet);
 
-                    m_Group.Inputs[i] = new DefStEntityAimInput(packet.Aim);
+                    SetClientInput(m_NetworkGroup.Entities[i], new DefStEntityAimClientInput(packet.Aim));
                 }
-            } 
+            }
+
+            for (int i = 0; i != m_LocalGroup.Length; i++)
+            {
+                if (!m_LocalGroup.Entities[i].HasComponent<ClientDriveData<DefStEntityAimInput>>())
+                    continue;
+
+                var newRotation = GetNewRotation(currentInput, m_LocalGroup.ClientInputs[i].Aim);
+
+                EntityUpdateInput(m_LocalGroup.Entities[i], new DefStEntityAimInput(newRotation), false);
+                SetClientInput(m_LocalGroup.Entities[i], new DefStEntityAimClientInput(newRotation));
+            }
             m_InputClient.ToZero();
         }
 
@@ -117,15 +138,7 @@ namespace package.stormium.def.Movements.Systems
                     return;
                 }
 
-                if (entity.HasComponent<DefStEntityAimInput>())
-                {
-                    entity.SetComponentData(new DefStEntityAimInput(inputPacket.Aim));
-                }
-                else
-                {
-                    //TODO: Disconnect player
-                    Debug.Log($"Invalid component for ({entity.Index}, {entity.Version}) ! TODO: Disconnect Player");
-                }
+                EntityUpdateInput(entity, new DefStEntityAimInput(inputPacket.Aim), false);
             }
             else if (msgPattern == InputMsgToClientsId)
             {
@@ -141,22 +154,13 @@ namespace package.stormium.def.Movements.Systems
 
                 entity = conEntityMgr.GetEntity(entity);
 
-                if (entity.HasComponent<DefStEntityAimInput>())
-                {
-                    /*if (!entity.HasComponent<DataIgnoreServerOperation<DefStEntityAimInput>>())
-                        entity.SetComponentData(new DefStEntityAimInput(inputPacket.Rotation));*/
-                }
-                else
-                {
-                    //TODO: Disconnect from server
-                    Debug.Log($"Invalid component for ({entity.Index}, {entity.Version}) ! TODO: Disconnect from server.");
-                }
+                EntityUpdateInput(entity, new DefStEntityAimInput(inputPacket.Aim), false);
             }
         }
 
         private void SendNewInputToServer(NetworkEntity entity, InputPacket packet)
         {
-            var msgMgr  = entity.GetNetworkInstance().GetMessageManager();
+            var msgMgr  = GameServerManagement.Main.LocalInstance.GetMessageManager();
             var msgData = msgMgr.Create(InputMsgToServerId);
 
             packet.WriteTo(msgData);
@@ -171,6 +175,40 @@ namespace package.stormium.def.Movements.Systems
             packet.WriteTo(msgData);
 
             m_NetworkMessageSystem.InstantSendToAllDefault(caller, msgData, DeliveryMethod.Unreliable);
+        }
+
+        // TODO
+        // ReSharper disable RedundantAssignment
+        private Vector2 GetNewRotation(Vector2 currentInput, Vector2 previous)
+        {
+            currentInput = new Vector2(-Input.GetAxisRaw("Mouse Y"), Input.GetAxisRaw("Mouse X")) * Sensivity;
+                    
+            var newRotation = previous + currentInput;
+            newRotation.x = Mathf.Clamp(newRotation.x, -89f, 89f);
+            newRotation.y = newRotation.y % 360;
+
+            return newRotation;
+        }
+        // ReSharper restore RedundantAssignment
+
+        private void SetClientInput(Entity entity, DefStEntityAimClientInput input)
+        {
+            PostUpdateCommands.SetComponent(entity, input);
+        }
+
+        private void EntityUpdateInput(Entity entity, DefStEntityAimInput input, bool isServer)
+        {
+            if (entity.HasComponent<DefStEntityAimInput>())
+            {
+                entity.SetComponentData(input);
+            }
+            else
+            {
+                //TODO: Disconnect from server
+                Debug.Log(isServer 
+                    ? $"Invalid component for ({entity.Index}, {entity.Version}) ! TODO: Disconnect Player."
+                    : $"Invalid component for ({entity.Index}, {entity.Version}) ! TODO: Disconnect from server.");
+            }
         }
 
         public struct InputPacket

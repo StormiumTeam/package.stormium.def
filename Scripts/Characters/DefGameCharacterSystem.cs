@@ -71,9 +71,11 @@ namespace package.stormium.def.characters
             return false;
         }
 
-        public NativeArray<Entity> GetPlayerCharacters(Entity entity)
+        public NativeList<Entity> GetPlayerCharacters(Entity entity)
         {
-            var list   = new NativeList<Entity>();
+            UpdateInjectedComponentGroups();
+            
+            var list   = new NativeList<Entity>(Allocator.Temp);
             var length = m_PlayerCharacterGroup.CalculateLength();
 
             var entities     = m_PlayerCharacterGroup.GetEntityArray();

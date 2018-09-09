@@ -17,7 +17,7 @@ namespace package.stormium.def.characters
         
         protected override void OnUpdate()
         {
-            if (!GameServerManagement.IsCurrentlyHosting)
+            if (!GameServerManagement.IsCurrentlyHosting && IsConnectedOrHosting)
                 return;
                 
             for (int i = 0; i != m_Group.Length; i++)

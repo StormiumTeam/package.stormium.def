@@ -16,6 +16,8 @@ namespace package.stormium.def
                                                              .ServerInstance
                                                              .World
                                                              .GetOrCreateManager<ConnectionEntityManager>();
+
+        protected bool IsConnectedOrHosting => GameServerManagement.Main?.LocalNetManager.IsRunning ?? false;
         
         [Inject] protected MsgIdRegisterSystem MsgIdRegisterSystem;
         [Inject] protected GameServerManagement GameServerManagement;
