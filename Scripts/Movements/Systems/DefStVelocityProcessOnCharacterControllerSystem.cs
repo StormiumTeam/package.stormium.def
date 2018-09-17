@@ -99,7 +99,7 @@ namespace package.stormium.def.Movements.Systems
 
                 if (!motor.IsGrounded() && !motor.IsStableOnGround && !motor.IsSliding)
                 {
-                    oldVelocity += new Vector3(0, -15, 0) * dt;
+                    oldVelocity += new Vector3(0, Physics.gravity.y, 0) * dt;
                     motor.CharacterController.stepOffset = 0.05f;
                 }
                 else if (motor.IsGrounded() && motor.IsStableOnGround && !motor.IsSliding)
@@ -123,8 +123,32 @@ namespace package.stormium.def.Movements.Systems
                         ref correctVelocity))
                         break;
                 }
+                
+                // Slide on floor (done next frame)
+                var slideAngle = Vector3.Angle(motor.AngleDir, Vector3.up);
+                if (slideAngle > 45 && slideAngle < 89 && motor.IsGrounded())
+                {                                      
+                    var oldY = correctVelocity.y;
+                    
+                    var undesiredMotion = motor.AngleDir * Vector3.Dot(correctVelocity, motor.AngleDir);
+                    var desiredMotion   = correctVelocity - undesiredMotion;
+                    var leftOverInertia = desiredMotion * 0.5f * dt;
+                    
+                    correctVelocity   = desiredMotion + leftOverInertia;
+                    correctVelocity.y = oldY - 15 * dt;
+                    correctVelocity.y = Mathf.Clamp(correctVelocity.y, -10, 60);
+                    
+                    motor.AngleDir = ProbeGround(motor, transform, motor.AngleDir, 90, 90);
+                    
+                    motor.IsStableOnGround = false;
+                    motor.IsSliding        = true;
+                }
+                else
+                {
+                    motor.IsStableOnGround = motor.IsGrounded();
+                    motor.IsSliding        = false;
+                }
 
-                // TODO: We have some problem with this (probe don't work well, and sometime we get tped even if we shouldn't)
                 if (motor.IsGrounded())
                 {
                     motor.AngleDir = GetAngleDir(motor, transform);
@@ -135,33 +159,6 @@ namespace package.stormium.def.Movements.Systems
                     motor.AngleDir = ProbeGround(motor, transform, motor.AngleDir,
                         45 - Mathf.Clamp(correctVelocity.ToGrid(1).magnitude, 0, 15) * 3 + 15, 45);
                 }
-                
-                // Slide on floor
-                Profiler.BeginSample("Slide on floor");
-                var slideAngle = Vector3.Angle(motor.AngleDir, Vector3.up);
-                if (slideAngle > 45 && slideAngle < 90 && motor.IsGrounded())
-                {                    
-                    var oldY = correctVelocity.y;
-                    
-                    var undesiredMotion = motor.AngleDir * Vector3.Dot(correctVelocity, motor.AngleDir);
-                    var desiredMotion   = correctVelocity - undesiredMotion;
-                    var leftOverInertia = desiredMotion * 0.5f * dt;
-                    
-                    correctVelocity = desiredMotion + leftOverInertia;
-                    correctVelocity.y = oldY - 15 * dt;
-                    correctVelocity.y = Mathf.Clamp(correctVelocity.y, -10, 60);
-                    
-                    motor.AngleDir = ProbeGround(motor, transform, motor.AngleDir, 90, 90);
-                    
-                    motor.IsStableOnGround = false;
-                    motor.IsSliding = true;
-                }
-                else
-                {
-                    motor.IsStableOnGround = motor.IsGrounded();
-                    motor.IsSliding = false;
-                }
-                Profiler.EndSample();
                 
                 m_Group.VelocityArray[i] = new StVelocity(correctVelocity);
             }
@@ -262,45 +259,39 @@ namespace package.stormium.def.Movements.Systems
         private Vector3 GetAngleDir(CharacterControllerMotor motor, Transform transform)
         {
             CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, false);
-            
-            var controller = motor.CharacterController;
-            var height = controller.height;
-            var radius = controller.radius;
 
-            Profiler.BeginSample("Prepare");
+            var controller = motor.CharacterController;
+            var height     = controller.height;
+            var radius     = controller.radius;
+
             var worldCenter = transform.position + controller.center;
             var lowPoint    = worldCenter - new Vector3(0, height * 0.5f, 0);
-            var highPoint = lowPoint + new Vector3(0, height, 0);
-            var distance = height * 0.25f + 0.1f + (controller.skinWidth * 4);
-            Profiler.EndSample();
+            var highPoint   = lowPoint + new Vector3(0, height, 0);
+            var distance    = height * 0.25f + 0.1f + (controller.skinWidth * 4);
+
+            var layerMask     = CPhysicSettings.PhysicInteractionLayerMask;
+            var rayLength     = Physics.CapsuleCastNonAlloc(worldCenter, highPoint, radius, Vector3.down, s_RaycastHits, distance, layerMask);
+            var smallestAngle = float.MaxValue;
+            var smallestDir   = Vector3.down;
+
+            if (rayLength > 0) motor.IsGroundForcedThisFrame = true;
             
-            Profiler.BeginSample("Get mask");
-            var layerMask = CPhysicSettings.PhysicInteractionLayerMask;
-            Profiler.EndSample();
-            var rayLength = Physics.CapsuleCastNonAlloc(worldCenter, highPoint, radius, Vector3.down, s_RaycastHits, distance, layerMask);
-            var highestAngle = -1f;
-            var highestDir = Vector3.down;
             for (int i = 0; i != rayLength; i++)
             {
-                var ray = s_RaycastHits[i];
-                var normal = ray.normal;
-
-                normal = RepairHitSurfaceNormal(ray);
-
-                motor.IsGroundForcedThisFrame = true;
-                
+                var ray    = s_RaycastHits[i];
+                var normal = RepairHitSurfaceNormal(ray);
                 var angle = Vector3.Angle(Vector3.up, normal);
 
-                if (angle > highestAngle)
+                if (angle < smallestAngle)
                 {
-                    highestAngle = angle;
-                    highestDir   = normal;
+                    smallestAngle = angle;
+                    smallestDir   = normal;
                 }
             }
-            
+
             CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, true);
 
-            return highestDir;
+            return smallestDir;
         }
 
         public static Vector3 RepairHitSurfaceNormal(RaycastHit hit)

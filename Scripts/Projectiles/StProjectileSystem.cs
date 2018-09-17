@@ -1,3 +1,6 @@
+using System;
+using System.Linq;
+using LiteNetLib.Utils;
 using package.stormium.core;
 using package.stormium.def;
 using package.stormiumteam.networking;
@@ -36,107 +39,58 @@ namespace package.stormium.def.actions
 
         [Inject] protected ControllerGroup AllControllers;
         [Inject] protected RigidbodyGroup AllRigidbodies;
-        
-        public (Entity send, Entity receive) AskPhysic_Start(Entity caller, Entity sendContract = default)
-        {
-            if (sendContract == Entity.Null)
-            {
-                sendContract = EntityManager.CreateEntity(typeof(EntityContractTag), typeof(EntitySendContract));
-            }
-            
-            var receiveContract = EntityManager.CreateEntity(typeof(EntityContractTag), typeof(EntityReceiveContract));
-            foreach (var obj in AppEvent<StEventAskPhysicObjects.IEv>.eventList)
-            {
-                AppEvent<StEventAskPhysicObjects.IEv>.Caller = this;
-                obj.CallbackStartOnAskPhysicObjects(new StEventAskPhysicObjects.StartArguments(caller, sendContract, receiveContract));
-            }
 
-            return (sendContract, receiveContract);
-        }
-
-        public void AskPhysic_End(Entity caller, Entity sendContract, Entity receiveContract)
+        public Entity CreateCommand(params ComponentType[] cmdTypes)
         {
-            foreach (var obj in AppEvent<StEventAskPhysicObjects.IEv>.eventList)
-            {
-                AppEvent<StEventAskPhysicObjects.IEv>.Caller = this;
-                obj.CallbackEndOnAskPhysicObjects(new StEventAskPhysicObjects.EndArguments(caller, sendContract, receiveContract));
-            }
+            var initArray = new ComponentType[] {typeof(EntityCommand)};
             
-            PostUpdateCommands.DestroyEntity(sendContract);
-            PostUpdateCommands.DestroyEntity(receiveContract);
+            return EntityManager.CreateEntity(initArray.Concat(cmdTypes).ToArray());
         }
         
-        public (Entity send, Entity receive) AskEntityInProjectile_Start(Entity caller, Entity victim, Entity sendContract = default)
+        public Entity CreateCommandTs(params ComponentType[] cmdTypes)
         {
-            if (sendContract == Entity.Null)
-            {
-                sendContract = EntityManager.CreateEntity(typeof(EntityContractTag), typeof(EntitySendContract));
-            }
+            var initArray = new ComponentType[] {typeof(EntityCommand), typeof(EntityCommandSource), typeof(EntityCommandTarget)};
             
-            var receiveContract = EntityManager.CreateEntity(typeof(EntityContractTag), typeof(EntityReceiveContract));
-            foreach (var obj in AppEvent<StEventOnProjectileHit.IEv>.eventList)
-            {
-                AppEvent<StEventOnProjectileHit.IEv>.Caller = this;
-                obj.CallbackStartOnProjectileHitBegin(new StEventOnProjectileHit.StartArguments(caller, victim, sendContract, receiveContract));
-            }
-
-            return (sendContract, receiveContract);
+            return EntityManager.CreateEntity(initArray.Concat(cmdTypes).ToArray());
         }
-
-        public void AskEntityInProjectile_End(Entity caller, Entity victim, Entity sendContract, Entity receiveContract)
+        
+        public Entity CreateCommandResult(params ComponentType[] cmdTypes)
         {
-            foreach (var obj in AppEvent<StEventOnProjectileHit.IEv>.eventList)
-            {
-                AppEvent<StEventOnProjectileHit.IEv>.Caller = this;
-                obj.CallbackEndOnOnProjectileHitEnd(new StEventOnProjectileHit.EndArguments(caller, victim, sendContract, receiveContract));
-            }
+            var initArray = new ComponentType[] {typeof(EntityCommand), typeof(EntityCommandResult)};
             
-            PostUpdateCommands.DestroyEntity(sendContract);
-            PostUpdateCommands.DestroyEntity(receiveContract);
+            return EntityManager.CreateEntity(initArray.Concat(cmdTypes).ToArray());
         }
 
-        public Entity EndProjectile()
+        public void DiffuseCommand(Entity command, Entity commandResult, bool defaultResult, CmdState state)
         {
-            return EntityManager.CreateEntity(typeof(EntityContractTag), typeof(EntitySendContract), typeof(SendContractProjectileExplode));
-        }
-
-        public Entity DiffuseEndProjectile(Entity caller, Entity sendContract)
-        {
-            var receiveContract = EntityManager.CreateEntity(typeof(EntityContractTag), typeof(EntityReceiveContract));
-            foreach (var obj in AppEvent<StEventProjectileEnd.IEv>.eventList)
-            {
-                AppEvent<StEventProjectileEnd.IEv>.Caller = this;
-                obj.CallbackOnProjectileEnd(new StEventProjectileEnd.Arguments(caller, sendContract, receiveContract));
-            }
+            commandResult.SetComponentData(new EntityCommandResult { IsAuthorized = Convert.ToByte(defaultResult) });
             
-            PostUpdateCommands.DestroyEntity(sendContract);
-            PostUpdateCommands.DestroyEntity(receiveContract);
-
-            return receiveContract;
-        }
-    }
-
-    public abstract class StEventProjectileEnd
-    {
-        public struct Arguments : IDelayComponentArguments
-        {
-            public            Entity Projectile;
-            [ReadOnly] public Entity SendContract;
-            public            Entity ReceiveContract;
-
-            public Arguments(Entity projectile, [ReadOnly] Entity sendContract, Entity receiveContract)
+            foreach (var ev in AppEvent<StEventDiffuseCommand.IEv>.eventList)
             {
-                Projectile      = projectile;
-                SendContract    = sendContract;
-                ReceiveContract = receiveContract;
+                AppEvent<StEventDiffuseCommand.IEv>.Caller = this;
+                
+                commandResult.SetComponentData(new EntityCommandResult { IsAuthorized = Convert.ToByte(defaultResult) });
+                
+                ev.OnCommandDiffuse(new StEventDiffuseCommand.Arguments(command, commandResult, state));
             }
         }
 
-        public interface IEv : IAppEvent
+        public void StartAskingPhysicObjects(Entity caller, Entity reasonEntity)
         {
-            void CallbackOnProjectileEnd(Arguments args);
+            foreach (var ev in AppEvent<StEventAskPhysicObjects.IEv>.eventList)
+            {
+                AppEvent<StEventAskPhysicObjects.IEv>.Caller = this;
+                ev.CallbackStartOnAskPhysicObjects(new StEventAskPhysicObjects.StartArguments(caller, reasonEntity));
+            }
         }
-
-        internal abstract void Sealed();
+        
+        public void EndAskingPhysicObjects(Entity caller, Entity reasonEntity)
+        {
+            foreach (var ev in AppEvent<StEventAskPhysicObjects.IEv>.eventList)
+            {
+                AppEvent<StEventAskPhysicObjects.IEv>.Caller = this;
+                ev.CallbackEndOnAskPhysicObjects(new StEventAskPhysicObjects.EndArguments(caller, reasonEntity));
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 ﻿using package.stormium.def.Movements.Data;
+using package.stormium.def.Utilities;
 using package.stormiumteam.shared;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -8,16 +8,17 @@ using UnityEngine.Experimental.Input;
 
 namespace package.stormium.def.Movements.Systems
 {
-    [UpdateAfter(typeof(DefStDodgeOnGroundProcessSystem))]
-    public class DefStJumpProcessSystem : ComponentSystem
+    public class DefStWallJumpProcessSystem : ComponentSystem
     {
+        private const float DefaultCooldown = 0.1f;
+        
         struct Group
         {
-            public ComponentDataArray<StVelocity>                        Velocities;
+            public ComponentDataArray<StVelocity>                           Velocities;
             public ComponentDataArray<DefStJumpSettings>                    Settings;
-            public ComponentDataArray<DefStRunInput>                       RunInputs;
+            public ComponentDataArray<DefStRunInput>                        RunInputs;
             public ComponentDataArray<DefStJumpInput>                       Inputs;
-            public ComponentDataArray<DefStJumpProcessData>                 Proccesses;
+            public ComponentDataArray<DefStWallJumpProcessData>             Proccesses;
             public ComponentArray<CharacterControllerMotor>                 Motors;
             public SubtractiveComponent<VoidSystem<DefStJumpProcessSystem>> Void1;
             public EntityArray                                              Entities;
@@ -59,61 +60,61 @@ namespace package.stormium.def.Movements.Systems
             ref DefStJumpSettings    setting,
             ref DefStRunInput runInput,
             ref DefStJumpInput       input,
-            ref DefStJumpProcessData process,
+            ref DefStWallJumpProcessData process,
             CharacterControllerMotor motor
         )
         {
-            var doJump = input.State != InputState.None && (process.ComboCtx < setting.MaxCombo && process.CooldownBeforeNextJump <= 0f)
-                                                        && (motor.IsGrounded() || process.ComboCtx > 0);
-            var airJump = doJump && !motor.IsGrounded() && !motor.IsSliding;
+            var action = input.State != InputState.None && !motor.IsGrounded() && Time.time > process.TimeBeforeNextWJ;
+            if (!action)
+                return false;
 
-            if (input.TimeBeforeResetState <= 0f)
+            var fwd = motor.transform.forward;
+            var pos = motor.transform.position + new Vector3(0, motor.CharacterController.stepOffset + 0.1f);
+            var rot = motor.transform.rotation;
+            var rd = motor.CharacterController.radius + 0.075f;
+            var sw = motor.CharacterController.skinWidth + 0.025f;
+            var height = motor.CharacterController.height - motor.CharacterController.stepOffset;
+            var subheight = (height * 0.75f) - 0.005f;
+            
+            CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, false);
+
+            var direction = (Vector3)SrtComputeDirection(fwd, rot, runInput.Direction);
+            var rayTrace = UtilityWallRayTrace.RayTrace(ref direction, ref pos, ref rd, ref sw, ref height, ref subheight, motor.CharacterController);
+            
+            Debug.DrawRay(rayTrace.point, rayTrace.normal, Color.red, 10);
+            
+            CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, true);
+
+            var success = rayTrace.normal != Vector3.zero && Mathf.Abs(rayTrace.normal.y) < 0.2f;
+            if (success)
             {
+                rayTrace.normal = rayTrace.normal.ToGrid(1).normalized;
+                
+                var gravity = GetGravity(entity, setting);
+                velocity.Value = RaycastUtilities.SlideVelocityNoYChange(velocity.Value, rayTrace.normal);
+
+                velocity.Value -= gravity * (setting.JumpPower * 0.98f);
+
+                var previousVelocity = velocity.Value;
+                var bounceDir = rayTrace.normal * 6.5f;
+                var minSpeed = bounceDir.magnitude;
+                
+                velocity.Value += bounceDir;
+                
+                var flatVelocity = velocity.Value.ToGrid(1);
+                var oldY = velocity.Value.y;
+
+                velocity.Value = Vector3.ClampMagnitude(flatVelocity, Mathf.Max(previousVelocity.magnitude, minSpeed));
+                
+                velocity.Value.y = oldY;
+
+                process.TimeBeforeNextWJ = Time.time + DefaultCooldown;
+
+                input.TimeBeforeResetState = -1f;
                 input.State = InputState.None;
             }
 
-            if (motor.IsStableOnGround)
-            {
-                process.ComboCtx = 0;
-            }
-
-            process.CooldownBeforeNextJump -= Time.deltaTime;
-            input.TimeBeforeResetState -= Time.deltaTime;
-
-            if (!doJump)
-                return false;
-
-            var gravity = GetGravity(entity, setting);
-            
-            var direction = SrtComputeDirection(motor.transform.forward, motor.transform.rotation, runInput.Direction);
-            var strafeAngle = SrtGetStrafeAngleNormalized(direction, velocity.Value);
-            if (math.all(runInput.Direction == float2.zero))
-            {
-                strafeAngle = 0f;
-            }
-
-            velocity.Value.y = math.max(velocity.Value.y, 0);
-            if (!airJump) velocity.Value -= gravity * setting.JumpPower;
-            else velocity.Value -= gravity * setting.JumpPower;
-
-            if (airJump)
-            {
-                velocity.Value = math.lerp(velocity.Value, SrtAirDash(velocity.Value, direction), 1f);
-            }
-            else
-            {
-                velocity.Value += (Vector3)(direction * (strafeAngle * 2.5f));
-
-                motor.MoveBy(Vector3.up * 0.01f);
-            }
-
-            input.TimeBeforeResetState = -1f;
-            input.State = InputState.None;
-
-            process.ComboCtx++;
-            process.CooldownBeforeNextJump = 0.1f;
-            
-            return true;
+            return success;
         }
 
         private Vector3 GetGravity(Entity entity, DefStJumpSettings setting)
@@ -143,11 +144,6 @@ namespace package.stormium.def.Movements.Systems
             var inputDirection3D = Vector3.Normalize(worldRotation * new Vector3(inputDirection.x, 0, inputDirection.y));
 
             return Vector3.Normalize(Vector3.Lerp(worldForward, inputDirection3D, 1 - (worldForward.magnitude - inputDirection3D.magnitude)));
-        }
-        
-        private static float SrtGetStrafeAngleNormalized(Vector3 direction, Vector3 velocityDirection)
-        {
-            return math.max(math.clamp(Vector3.Angle(direction, velocityDirection), 1, 90) / 90f, 0f);
         }
 
         private static float3 SrtAirDash(float3 velocity, float3 wishDirection)

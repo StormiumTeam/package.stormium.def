@@ -10,7 +10,8 @@ using UnityEngine.Experimental.Input;
 
 namespace package.stormium.def.Movements.Systems
 {
-    public class DefStDodgeOnGroundSystem : GameComponentSystem
+    [UpdateAfter(typeof(DefStGroundRunProcessSystem))]
+    public class DefStDodgeOnGroundProcessSystem : GameComponentSystem
     {
         struct Group
         {
@@ -20,7 +21,7 @@ namespace package.stormium.def.Movements.Systems
             public ComponentDataArray<DefStDodgeInput>                        Inputs;
             public ComponentDataArray<DefStDodgeOnGroundProcessData>          Proccesses;
             public ComponentArray<CharacterControllerMotor>                   Motors;
-            public SubtractiveComponent<VoidSystem<DefStDodgeOnGroundSystem>> Void1;
+            public SubtractiveComponent<VoidSystem<DefStDodgeOnGroundProcessSystem>> Void1;
             public EntityArray                                                Entities;
 
             public readonly int Length;
@@ -48,7 +49,7 @@ namespace package.stormium.def.Movements.Systems
                 ProcessItem(ref entity, ref velocity, ref runInput, ref setting, ref input, ref process, motor);
                 for (int frameIndex = 0; frameIndex != m_PhysicUpdaterSystem.LastIterationCount; frameIndex++)
                 {
-                    ProcessPhysicItem(m_PhysicUpdaterSystem.LastFixedTimeStep, ref input, ref process, motor);
+                    ProcessPhysicItem(m_PhysicUpdaterSystem.LastFixedTimeStep, ref setting, ref input, ref process, ref velocity, motor);
                 }
 
                 PostUpdateCommands.SetComponent(entity, velocity);
@@ -75,25 +76,12 @@ namespace package.stormium.def.Movements.Systems
             {
                 input.State = InputState.None;
             }
-            
-            if (process.InertieDelta > 0f && math.any(process.Direction != float3.zero))
-            {
-                var factor = (process.InertieDelta + 1) * 3f;
-                factor *= factor;
-                
-                motor.MoveBy(process.Direction * (1.25f + math.max(factor, 1)) * Time.deltaTime);
-            }
-
-            if (motor.IsGrounded())
-                process.InertieDelta -= Time.deltaTime;
-
-            process.CooldownBeforeNextDodge -= Time.deltaTime;
-            process.InertieDelta -= Time.deltaTime;
-            input.TimeBeforeResetState      -= Time.deltaTime;
 
             if (!doDodge)
                 return false;
 
+            process.StartFlatSpeed = velocity.Value.ToGrid(1).magnitude;
+            
             var gravity   = GetGravity(entity, setting);
             var direction = SrtComputeDirection(motor.transform.forward.normalized, motor.transform.rotation, runInput.Direction);
 
@@ -109,9 +97,11 @@ namespace package.stormium.def.Movements.Systems
             input.TimeBeforeResetState = -1f;
             input.State                = InputState.None;
 
-            process.CooldownBeforeNextDodge = 1f;
-            process.InertieDelta = 0.2f;
+            process.StartFlatSpeed = Mathf.Max(process.StartFlatSpeed, setting.MinSpeed);
+            process.CooldownBeforeNextDodge = 0.5f;
+            process.InertieDelta = 1f;
             process.Direction               = direction;
+            process.IsDodging = 1;
             
             // Send dodge message to clients
             if (IsConnectedOrHosting)
@@ -127,20 +117,45 @@ namespace package.stormium.def.Movements.Systems
         private void ProcessPhysicItem
         (
             float                             dt,
+            ref DefStDodgeOnGroundSettings settings,
             ref DefStDodgeInput               input,
             ref DefStDodgeOnGroundProcessData process,
+            ref StVelocity velocity,
             CharacterControllerMotor          motor
         )
         {
-            if (process.CooldownBeforeNextDodge > 0f && process.CooldownBeforeNextDodge < 0.6f
-                                                     && math.any(process.Direction != float3.zero))
+            if (process.InertieDelta > 0f && math.any(process.Direction != float3.zero))
             {
-                var factor = process.CooldownBeforeNextDodge * 3;
-                factor *= factor;
+                if (2 == 1)
+                {
+                    var previousVelocity = velocity.Value;
+                    var previousFlatVel  = previousVelocity.ToGrid(1);
+                    var previousSpeed    = Mathf.Max(previousFlatVel.magnitude, settings.MinSpeed) + (process.InertieDelta * dt);
 
-                motor.MoveBy(process.Direction * (1.5f + math.max(factor, 1)) * dt);
+                    velocity.Value   = math.normalize(process.Direction) * previousSpeed;
+                    velocity.Value.y = previousVelocity.y;
+                }
+                else
+                {
+                    var factor = process.InertieDelta;
+
+                    motor.MoveBy(process.Direction * factor * dt);
+                }
             }
 
+            if (motor.IsGrounded() && process.IsDodging == 1)
+            {
+                process.IsDodging = 0;
+
+                var oldY = velocity.Value.y;
+                var speed = Mathf.Min(velocity.Value.ToGrid(1).magnitude, process.StartFlatSpeed);
+
+                velocity.Value = velocity.Value.normalized * speed;
+                
+                velocity.Value.y = oldY;
+            }
+
+            process.InertieDelta -= motor.IsGrounded() ? dt * 50f : dt;
             process.CooldownBeforeNextDodge -= dt;
             input.TimeBeforeResetState      -= dt;
         }
@@ -183,6 +198,11 @@ namespace package.stormium.def.Movements.Systems
             velocity.y =  oldY;
 
             var speed = Mathf.Min(Mathf.Max(velocity.ToGrid(1).magnitude, minSpeed), maxSpeed);
+
+            velocity = wishDirection * speed;
+            velocity.y = oldY;
+
+            return velocity;
 
             return velocity.normalized * speed;
         }

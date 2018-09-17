@@ -52,11 +52,11 @@ namespace package.stormium.def
                 FrictionMin = 0.25f,
                 FrictionMax = 1f,
 
-                SurfaceFriction = 5.25f,
+                SurfaceFriction = 6.5f,
 
-                Acceleration   = 20f,
+                Acceleration   = 25f,
                 Deacceleration = 10f,
-                BaseSpeed      = 12f
+                BaseSpeed      = 10f
             };
         }
     }

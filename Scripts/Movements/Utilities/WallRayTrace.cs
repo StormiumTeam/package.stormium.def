@@ -88,8 +88,8 @@ namespace package.stormium.def.Utilities
                         Debug.Log("Computed: " + distance);
                         return new RaycastHit()
                         {
-                            point  = nearestPoint,
-                            normal = nearestNormal.ToGrid(1).normalized
+                            point  = startPosition + (nearestNormal * distance),
+                            normal = nearestNormal.normalized
                         };
                     }
                 }

@@ -1,5 +1,6 @@
 using package.stormium.core;
 using package.stormium.def.actions;
+using package.stormium.def.Movements;
 using package.stormium.def.Movements.Data;
 using package.stormiumteam.shared;
 using package.stormiumteam.shared.online;
@@ -204,6 +205,8 @@ namespace package.stormium.def.characters
             // Add processable data
             EntityManager.AddComponentData(entity, new DefStJumpProcessData());
             EntityManager.AddComponentData(entity, new DefStDodgeOnGroundProcessData());
+            EntityManager.AddComponentData(entity, new DefStWallJumpProcessData());
+            EntityManager.AddComponentData(entity, new DefStWallDodgeProcessData());
 
             // Make the clients able to change the input data
             EntityManager.AddComponentData(entity, new ClientDriveData<DefStRunInput>(Player));
