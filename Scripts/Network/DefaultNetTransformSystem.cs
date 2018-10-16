@@ -34,7 +34,7 @@ namespace package.stormium.def.Network
 
         [Inject] private MsgIdRegisterSystem m_MsgIdRegisterSystem;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
             m_MsgIdRegisterSystem.Register(this);
         }
@@ -59,7 +59,6 @@ namespace package.stormium.def.Network
             public SubtractiveComponent<NetPositionInterpolator>               Sub2;
             public SubtractiveComponent<NetPositionInterpolatorBuffer>         Sub3;
             public SubtractiveComponent<NetPositionDeadReckoning>         Sub4;
-            public TransformAccessArray                                        Trs;
 
             public readonly int Length;
         }
@@ -72,7 +71,6 @@ namespace package.stormium.def.Network
             public ComponentDataArray<NetPositionInterpolator> Interpolator;
             public BufferArray<NetPositionInterpolatorBuffer>                  BufferArray;
             public SubtractiveComponent<VoidSystem<DefaultNetTransformSystem>> Void1;
-            public TransformAccessArray                                        Trs;
 
             public readonly int Length;
         }
@@ -85,7 +83,6 @@ namespace package.stormium.def.Network
             public ComponentDataArray<NetPositionDeadReckoning>                DeadReckoning;
             public BufferArray<NetPositionDeadReckoningBuffer>                 BufferArray;
             public SubtractiveComponent<VoidSystem<DefaultNetTransformSystem>> Void1;
-            public TransformAccessArray                                        Trs;
 
             public readonly int Length;
         }
@@ -98,7 +95,6 @@ namespace package.stormium.def.Network
             public ComponentDataArray<NetPositionInterpolator>                 Interpolator;
             public SubtractiveComponent<VoidSystem<DefaultNetTransformSystem>> Void1;
             public SubtractiveComponent<NetPositionInterpolatorBuffer> Sub1;
-            public TransformAccessArray                                        Trs;
             public EntityArray Entities;
 
             public readonly int Length;
@@ -112,7 +108,6 @@ namespace package.stormium.def.Network
             public ComponentDataArray<NetPositionDeadReckoning>                DeadReckoning;
             public SubtractiveComponent<VoidSystem<DefaultNetTransformSystem>> Void1;
             public SubtractiveComponent<NetPositionDeadReckoningBuffer> Sub1;
-            public TransformAccessArray                                        Trs;
             public EntityArray Entities;
 
             public readonly int Length;
@@ -167,15 +162,12 @@ namespace package.stormium.def.Network
 
         protected override void OnUpdate()
         {
-            return;
-            
             var delta = Time.deltaTime;
             var pingInt = m_Gms.Main?.ServerInstance?.PeerInstance?.Peer?.Ping ?? 0;
             pingInt = math.max(pingInt, m_Gms?.Main?.ServerInstance?.Get<ConnectionNetManagerConfig>().ConfigUpdateTime ?? 0);
-            var ping = math.max(pingInt * 0.0015f, delta);
-            ping += delta * 2;
+            var ping = math.max(pingInt * 0.001f, delta * 1.1f);
 
-            ping = math.max(ping, 0.05f);
+            ping = math.min(ping, 0.05f);
             
             var needToReinject = false;
             for (int i = 0; i != m_WithoutBufferGroupInterpolator.Length; i++)
@@ -203,6 +195,7 @@ namespace package.stormium.def.Network
                 var progress = math.clamp((deltaProgress / (math.max(latency, 10) * 0.01f)) * 5f, 0, 0.99f);
                 //localLocation = Vector3.Lerp(localLocation, m_PositionGroup.Network[i].Predicted, progress * 0.75f);
                 localLocation = Vector3.Lerp(localLocation, m_PositionGroup.Network[i].Predicted, 0.75f);
+                localLocation = Vector3.MoveTowards(localLocation, m_PositionGroup.Network[i].Predicted, delta * 10);
                 //localLocation = Vector3.MoveTowards(localLocation, m_PositionGroup.Network[i].Predicted, 10 * Time.deltaTime);
 
                 var net = m_PositionGroup.Network[i];
@@ -210,17 +203,20 @@ namespace package.stormium.def.Network
                 m_PositionGroup.Network[i] = net;
 
                 m_PositionGroup.Local[i] = new Position {Value = localLocation};
-                m_PositionGroup.Trs[i].position = localLocation;
             }
 
             for (int i = 0; i != m_BufferInterpolatorGroup.Length; i++)
             {
-                const float cDelay = 0.01f;
+                const float cDelay = 0.005f;
+                const float cAddPingDelay = 0.01f;
+                const float cLin = 100f;
+                const float cExp = 10f;
 
                 var interpolator = m_BufferInterpolatorGroup.Interpolator[i];
                 var elemBuffer   = m_BufferInterpolatorGroup.BufferArray[i];
 
-                var target = m_BufferInterpolatorGroup.Trs[i];
+                var target = m_BufferInterpolatorGroup.Local[i];
+                var previousValue = target.Value;
 
                 //Update time
                 if (interpolator.CurrentTime >= 0f)
@@ -246,7 +242,7 @@ namespace package.stormium.def.Network
                         interpolator.StartedTime = interpolator.CurrentTime;
 
                         //Set starting points to interpolate from
-                        interpolator.StartingPosition = target.position;
+                        interpolator.StartingPosition = m_BufferInterpolatorGroup.Network[i].Target;
                     }
 
                     //Current position is towards the first element of the queue
@@ -256,11 +252,12 @@ namespace package.stormium.def.Network
                         interpolator.TimeBetween       = prev.Timestamp - interpolator.StartedTime;
                         interpolator.TimeSincePrevious = interpolator.CurrentTime - interpolator.StartedTime;
 
-                        if (Math.Abs(prev.Timestamp - interpolator.CurrentTime) > ping + cDelay
-                            || interpolator.TimeBetween > ping + cDelay
-                            || Mathf.Abs(interpolator.LatestTimestamp - interpolator.CurrentTime) > ping + cDelay)
+                        if (Math.Abs(prev.Timestamp - interpolator.CurrentTime) > ping + cAddPingDelay
+                            || interpolator.TimeBetween > ping + cAddPingDelay
+                            || Mathf.Abs(interpolator.LatestTimestamp - interpolator.CurrentTime) > ping + cAddPingDelay)
                         {
                             interpolator = default(NetPositionInterpolator);
+                            interpolator.StartingPosition = m_BufferInterpolatorGroup.Local[i].Value;
                             interpolator.CurrentTime = prev.Timestamp;
                             elemBuffer.Clear();
                         }
@@ -271,12 +268,14 @@ namespace package.stormium.def.Network
                             lerpT = 0f;
                             
                             interpolator             = default(NetPositionInterpolator);
+                            interpolator.StartingPosition = m_BufferInterpolatorGroup.Network[i].Target;
                             interpolator.CurrentTime = -1f;
                             elemBuffer.Clear();
                         }
 
-                        target.position = Vector3.LerpUnclamped(interpolator.StartingPosition, prev.Position, lerpT);
-                        m_BufferInterpolatorGroup.Local[i] = new Position {Value = target.position};
+                        target.Value = Vector3.Lerp(interpolator.StartingPosition, prev.Position, lerpT);
+                        target.Value = Vector3.MoveTowards(Vector3.Lerp(previousValue, target.Value, delta * cLin), target.Value, delta * cExp);
+                        m_BufferInterpolatorGroup.Local[i] = target;
                         m_BufferInterpolatorGroup.Interpolator[i] = interpolator;
                         continue;
                     }
@@ -285,7 +284,7 @@ namespace package.stormium.def.Network
                     var next = prev;
 
                     //Find the first entry where the current time doesn't pass it.
-                    var prevNextArray = new NativeArray<NetPositionInterpolatorBuffer>(2, Allocator.Temp)
+                    var prevNextArray = new NativeArray<NetPositionInterpolatorBuffer>(2, Allocator.TempJob)
                     {
                         [0] = prev,
                         [1] = next
@@ -303,8 +302,8 @@ namespace package.stormium.def.Network
                     //Calculate T0+dt since prev instead of since begining
                     interpolator.TimeBetween = interpolator.CurrentTime - prev.Timestamp;
                     
-                    if (interpolator.TimeBetween > ping + cDelay
-                        || Mathf.Abs(interpolator.LatestTimestamp - interpolator.CurrentTime) > ping + cDelay)
+                    if (interpolator.TimeBetween > ping + cAddPingDelay
+                        || Mathf.Abs(interpolator.LatestTimestamp - interpolator.CurrentTime) > ping + cAddPingDelay)
                     {
                         interpolator = default(NetPositionInterpolator);
                         interpolator.CurrentTime = prev.Timestamp;
@@ -312,8 +311,8 @@ namespace package.stormium.def.Network
                         
                         var position = m_BufferInterpolatorGroup.Network[i].Target;
                         
-                        target.position                    = position;
-                        m_BufferInterpolatorGroup.Local[i] = new Position {Value = target.position};
+                        target.Value                    = position;
+                        m_BufferInterpolatorGroup.Local[i] = target;
                         m_BufferInterpolatorGroup.Interpolator[i] = interpolator;
 
                         continue;
@@ -326,8 +325,10 @@ namespace package.stormium.def.Network
                     }
 
                     //Return the interpolation of T0+dt in this piece
-                    target.position = Vector3.Lerp(prev.Position, next.Position, (interpolator.TimeSincePrevious / interpolator.TimeBetween));
-                    m_BufferInterpolatorGroup.Local[i] = new Position {Value = target.position};
+
+                    target.Value = Vector3.Lerp(prev.Position, next.Position, (interpolator.TimeSincePrevious / interpolator.TimeBetween));
+                    target.Value = Vector3.MoveTowards(Vector3.Lerp(previousValue, target.Value, delta * cLin), target.Value, delta * cExp);
+                    m_BufferInterpolatorGroup.Local[i] = target;
 
                     interpolator.StartedTime = interpolator.CurrentTime;
                     interpolator.StartingPosition = prev.Position;
@@ -338,8 +339,8 @@ namespace package.stormium.def.Network
                 {
                     var position = m_BufferInterpolatorGroup.Network[i].Target;
                     
-                    target.position                    = position;
-                    m_BufferInterpolatorGroup.Local[i] = new Position {Value = position};
+                    target.Value                    = position;
+                    m_BufferInterpolatorGroup.Local[i] = target;
                 }
             }
 
@@ -379,7 +380,6 @@ namespace package.stormium.def.Network
 
                 m_BufferDeadReckoningGroup.DeadReckoning[i] = deadReckoning;
                 m_BufferDeadReckoningGroup.Local[i]        = new Position {Value = position};
-                m_BufferDeadReckoningGroup.Trs[i].position = position;
             }
             
             for (int i = 0; i != m_RotationGroup.Length; i++)
@@ -436,7 +436,7 @@ namespace package.stormium.def.Network
         [Inject] private PositionGroup        m_PositionGroup;
         [Inject] private RotationGroup        m_RotationGroup;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
             m_AppEventSystem.SubscribeToAll(this);
         }

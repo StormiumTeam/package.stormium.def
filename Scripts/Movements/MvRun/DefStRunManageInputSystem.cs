@@ -52,9 +52,9 @@ namespace package.stormium.def.Movements.Systems
 
         private DefStRunManageInputClient m_InputClient;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
-            base.OnCreateManager(capacity);
+            base.OnCreateManager();
 
             m_InputClient = new DefStRunManageInputClient();
             m_InputClient.CreateActionMap();

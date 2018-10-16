@@ -1,6 +1,7 @@
 ﻿using package.stormium.def.Movements.Data;
 using package.stormium.def.Utilities;
 using package.stormiumteam.shared;
+using Scripts.Movements.MvWallBounce;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -8,7 +9,7 @@ using UnityEngine.Experimental.Input;
 
 namespace package.stormium.def.Movements.Systems
 {
-    public class DefStWallDodgeProcessSystem : ComponentSystem
+    public class DefStWallDodgeProcessSystem : GameComponentSystem
     {
         private const float DefaultCooldown = 0.1f;
 
@@ -29,12 +30,17 @@ namespace package.stormium.def.Movements.Systems
 
         [Inject] private Group m_Group;
 
-        private Vector3         m_CachedDefaultGravity;
+        private Entity m_CmdDoDodge, m_CmdDoDodgeResult;
+
+        protected override void OnCreateManager()
+        {
+            m_CmdDoDodge = CreateCommandTarget(ComponentType.Create<CmdMovement>(), typeof(CmdMvWallBounce), typeof(CmdMvWallDodge));
+
+            m_CmdDoDodgeResult = CreateCommandResult(typeof(StVelocity));
+        }
 
         protected override void OnUpdate()
         {
-            m_CachedDefaultGravity = Physics.gravity;
-
             for (int i = 0; i != m_Group.Length; i++)
             {
                 var entity   = m_Group.Entities[i];
@@ -68,10 +74,18 @@ namespace package.stormium.def.Movements.Systems
             CharacterControllerMotor motor
         )
         {
-            var action = input.State != InputState.None && !motor.IsGrounded() && Time.time > process.TimeBeforeNextWD;
-            if (!action)
-                return false;
+            var action = input.State != InputState.None && !MvUtils.OnGround(motor, velocity) && Time.time > process.TimeBeforeNextWD;
+            
+            DiffuseCommand(m_CmdDoDodge, m_CmdDoDodgeResult, action, CmdState.Begin);
 
+            if (!m_CmdDoDodgeResult.GetComponentData<EntityCommandResult>().AsBool())
+            {
+                DiffuseCommand(m_CmdDoDodge, m_CmdDoDodgeResult, action, CmdState.End);
+                
+                return false;
+            }
+
+            var originalVelocity = velocity.Value;
             var fwd       = motor.transform.forward;
             var pos       = motor.transform.position + new Vector3(0, motor.CharacterController.stepOffset + 0.1f);
             var rot       = motor.transform.rotation;
@@ -85,9 +99,7 @@ namespace package.stormium.def.Movements.Systems
             var direction = (Vector3)SrtComputeDirection(fwd, rot, runInput.Direction);
             direction = (velocity.Value.ToGrid(1).normalized + direction * 2).normalized;
             var rayTrace = UtilityWallRayTrace.RayTrace(ref direction, ref pos, ref rd, ref sw, ref height, ref subheight, motor.CharacterController);
-            
-            Debug.DrawRay(rayTrace.point, rayTrace.normal, Color.red, 10);
-            
+
             CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, true);
 
             var success = rayTrace.normal != Vector3.zero && Mathf.Abs(rayTrace.normal.y) < 0.2f;
@@ -100,11 +112,11 @@ namespace package.stormium.def.Movements.Systems
                 var dirInertie = (reflected * (velocity.Value.magnitude + 1)) + rayTrace.normal * 3.5f;
                 dirInertie = RaycastUtilities.SlideVelocityNoYChange(velocity.Value, rayTrace.normal) + rayTrace.normal * 10;
 
-                var minSpeed = Mathf.Max(velocity.Value.ToGrid(1).magnitude + 3.5f, 12);
+                var minSpeed = Mathf.Max(velocity.Value.ToGrid(1).magnitude + setting.AdditiveSpeed, setting.MinSpeed);
                 
-                velocity.Value = dirInertie.normalized * (minSpeed);
+                velocity.Value = dirInertie.ToGrid(1).normalized * (minSpeed);
 
-                velocity.Value.y = oldY;
+                velocity.Value.y = Mathf.Max(oldY + 3, 0);
                 
                 process.TimeBeforeNextWD = Time.time + DefaultCooldown;
 
@@ -114,7 +126,12 @@ namespace package.stormium.def.Movements.Systems
                 groundProcess.CooldownBeforeNextDodge = 0.25f;
                 //groundProcess.InertieDelta            = 0.5f;
                 groundProcess.Direction               = dirInertie.normalized;
+                
+                BroadcastNewEntity(PostUpdateCommands, true);
+                PostUpdateCommands.AddComponent(new DefStWallJumpEvent(Time.time, Time.frameCount, entity, originalVelocity, rayTrace.normal));
             }
+            
+            DiffuseCommand(m_CmdDoDodge, m_CmdDoDodgeResult, action, CmdState.End);
 
             return success;
         }

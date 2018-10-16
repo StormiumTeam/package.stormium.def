@@ -3,6 +3,14 @@ using Unity.Entities;
 
 namespace package.stormium.def
 {
+    [Flags]
+    public enum GroundFallDamage
+    {
+        None = 0,
+        LoseSpeed = 1,
+        LoseStamina = 2
+    }
+    
     [Serializable]
     public struct DefStGroundRunSettings : IComponentData
     {
@@ -42,21 +50,25 @@ namespace package.stormium.def
         /// </summary>
         public float BaseSpeed;
 
+        public GroundFallDamage FallDamage;
+
         public static DefStGroundRunSettings NewBase()
         {
             return new DefStGroundRunSettings
             {
-                FrictionSpeedMin = 11f,
+                FrictionSpeedMin = 10f,
                 FrictionSpeedMax = 25f,
 
                 FrictionMin = 0.25f,
                 FrictionMax = 1f,
 
-                SurfaceFriction = 6.5f,
+                SurfaceFriction = 6f,
 
-                Acceleration   = 25f,
+                Acceleration   = 40f,
                 Deacceleration = 10f,
-                BaseSpeed      = 10f
+                BaseSpeed      = 9.25f,
+                
+                FallDamage = GroundFallDamage.LoseSpeed
             };
         }
     }

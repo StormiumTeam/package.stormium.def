@@ -9,7 +9,7 @@ namespace package.stormium.def.Utilities
 {
     public static class UtilityWallRayTrace
     {
-        private const float WallDistance        = 0.21f;
+        private const float WallDistance        = 0.15f;
         private const float WallMinimalDistance = 0.4f;
         private const float WallMaximalDistance = 1.1f;
 
@@ -61,7 +61,7 @@ namespace package.stormium.def.Utilities
             var overlapRadius = Mathf.Clamp(radius + skinWidth + (WallDistance * 2), WallMinimalDistance * 2,
                 WallMaximalDistance * 2);
             // We get the overlaps
-            var overlaps = Physics.OverlapCapsule(lowPoint, highPoint, overlapRadius);
+            var overlaps = Physics.OverlapCapsule(lowPoint, highPoint, overlapRadius, CPhysicSettings.PhysicInteractionLayerMask);
             // We iterate the overlaps
             for (int i = 0; i != overlaps.Length; i++)
             {
@@ -69,10 +69,10 @@ namespace package.stormium.def.Utilities
                 // We get the referencable gameobject for performance (referencable gameobjects cache components)
                 var referencable = ReferencableGameObject.GetComponent<ReferencableGameObject>(overlap.gameObject);
                 // We get the result from trying to get the BSPTree component
-                var meshGetResult = referencable.GetComponentFast<MeshCollider>();
+                var meshGetResult = referencable.GetComponentFast<Collider>();
                 if (!meshGetResult.HasValue) //< Verify it there is a BSPTree on this component
                     continue;
-                MeshCollider meshCollider = meshGetResult;
+                Collider meshCollider = meshGetResult;
 
                 using (var request = PhysicColletor.Active.Get<CapsuleCollider>())
                 {

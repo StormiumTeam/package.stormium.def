@@ -40,40 +40,6 @@ namespace package.stormium.def.actions
         [Inject] protected ControllerGroup AllControllers;
         [Inject] protected RigidbodyGroup AllRigidbodies;
 
-        public Entity CreateCommand(params ComponentType[] cmdTypes)
-        {
-            var initArray = new ComponentType[] {typeof(EntityCommand)};
-            
-            return EntityManager.CreateEntity(initArray.Concat(cmdTypes).ToArray());
-        }
-        
-        public Entity CreateCommandTs(params ComponentType[] cmdTypes)
-        {
-            var initArray = new ComponentType[] {typeof(EntityCommand), typeof(EntityCommandSource), typeof(EntityCommandTarget)};
-            
-            return EntityManager.CreateEntity(initArray.Concat(cmdTypes).ToArray());
-        }
-        
-        public Entity CreateCommandResult(params ComponentType[] cmdTypes)
-        {
-            var initArray = new ComponentType[] {typeof(EntityCommand), typeof(EntityCommandResult)};
-            
-            return EntityManager.CreateEntity(initArray.Concat(cmdTypes).ToArray());
-        }
-
-        public void DiffuseCommand(Entity command, Entity commandResult, bool defaultResult, CmdState state)
-        {
-            commandResult.SetComponentData(new EntityCommandResult { IsAuthorized = Convert.ToByte(defaultResult) });
-            
-            foreach (var ev in AppEvent<StEventDiffuseCommand.IEv>.eventList)
-            {
-                AppEvent<StEventDiffuseCommand.IEv>.Caller = this;
-                
-                commandResult.SetComponentData(new EntityCommandResult { IsAuthorized = Convert.ToByte(defaultResult) });
-                
-                ev.OnCommandDiffuse(new StEventDiffuseCommand.Arguments(command, commandResult, state));
-            }
-        }
 
         public void StartAskingPhysicObjects(Entity caller, Entity reasonEntity)
         {

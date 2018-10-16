@@ -23,7 +23,7 @@ namespace package.stormium.def.Network
         [Inject] private ConnectionPatternManager m_ConnectionPatternManager;
         [Inject] private ConnectionPlayerBank     m_ConnectionPlayerBank;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
             MainWorld.GetOrCreateManager<AppEventSystem>().SubscribeToAll(this);
 
@@ -192,7 +192,7 @@ namespace package.stormium.def.Network
                     em.RemoveComponent<PlayerUserLink>(player.WorldPointer);
                     em.RemoveComponent<ConnectedPlayerEntity>(player.WorldPointer);
 
-                    m_ConnectionPlayerBank.UnregisterPlayer(playerId);
+                    conPlayerBank.UnregisterPlayer(playerId);
 
                     Debug.Log("player disconnected!");
                 }

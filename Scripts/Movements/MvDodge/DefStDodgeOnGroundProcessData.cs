@@ -7,7 +7,7 @@ namespace package.stormium.def.Movements.Data
     {
         public float CooldownBeforeNextDodge;
         public float InertieDelta;
-        public float StartFlatSpeed;
+        public float StartFlatSpeed, StartAfterDodgeFlatSpeed;
         public float3 Direction;
         public int IsDodging;
 
@@ -17,6 +17,7 @@ namespace package.stormium.def.Movements.Data
             Direction = float3.zero;
             InertieDelta = 0f;
             StartFlatSpeed = 0f;
+            StartAfterDodgeFlatSpeed = 0f;
             IsDodging = 0;
         }
     }

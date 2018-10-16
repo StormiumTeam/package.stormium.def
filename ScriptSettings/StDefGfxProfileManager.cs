@@ -37,7 +37,7 @@ namespace package.stormium.def.settings
             
         }
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
             m_AllProfiles = new Dictionary<string, StDefGfxProfile>()
             {

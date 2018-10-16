@@ -50,11 +50,11 @@ namespace package.stormium.def.Movements.Systems
 
         private DefStJumpManageInputClient m_InputClient;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
             Debug.Log("<color='red'>" + GetType().Name + "</color>");
             
-            base.OnCreateManager(capacity);
+            base.OnCreateManager();
 
             m_InputClient = new DefStJumpManageInputClient();
             m_InputClient.CreateActionMap();

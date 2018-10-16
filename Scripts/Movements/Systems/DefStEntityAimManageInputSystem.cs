@@ -50,9 +50,9 @@ namespace package.stormium.def.Movements.Systems
 
         public float Sensivity = 3f;
         
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
-            base.OnCreateManager(capacity);
+            base.OnCreateManager();
 
             m_InputClient = new DefStEntityAimManageInputClient();
             m_InputClient.CreateActionMap();

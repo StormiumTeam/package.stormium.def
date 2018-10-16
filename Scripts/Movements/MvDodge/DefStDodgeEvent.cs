@@ -15,4 +15,9 @@ namespace package.stormium.def.Movements
             ServerTarget = serverTarget;
         }
     }
+
+    public struct CmdMvDodge : IComponentData
+    {
+        
+    }
 }

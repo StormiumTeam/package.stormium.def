@@ -5,10 +5,12 @@ using Scripts.Movements.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Jobs;
 
 namespace package.stormium.def.Movements.Systems
 {
     [UpdateAfter(typeof(DefStRunManageInputSystem))]
+    [UpdateAfter(typeof(DefStJumpProcessSystem))]
     public class DefStAerialRunProcessSystem : ComponentSystem
     {
         struct Group
@@ -16,8 +18,9 @@ namespace package.stormium.def.Movements.Systems
             public ComponentDataArray<StVelocity> Velocities;
             public ComponentDataArray<DefStAerialRunSettings> Settings;
             public ComponentDataArray<DefStRunInput> Inputs;
-            public ComponentArray<CharacterControllerMotor> Motors;
+            public ComponentDataArray<CharacterControllerState> State;
             public SubtractiveComponent<VoidSystem<DefStAerialRunProcessSystem>> Void1;
+            public TransformAccessArray Transforms;
 
             public readonly int Length;
         }
@@ -39,14 +42,15 @@ namespace package.stormium.def.Movements.Systems
             {
                 var velocityData = m_Group.Velocities[i];
                 var input        = m_Group.Inputs[i];
-                var motor        = m_Group.Motors[i];
+                var state        = m_Group.State[i];
                 var settings     = m_Group.Settings[i];
+                var transform = m_Group.Transforms[i];
 
-                if (motor.IsGrounded()) continue;
+                if (state.IsGrounded()) continue;
 
                 velocityData.Value = SrtFixNaN(velocityData.Value);
 
-                var direction   = SrtComputeDirection(motor.transform.rotation, input.Direction);
+                var direction   = SrtComputeDirection(transform.rotation, input.Direction);
                 var newVelocity = SrtMove(velocityData.Value, direction, settings, dt);
                 newVelocity.y = velocityData.Value.y;
 

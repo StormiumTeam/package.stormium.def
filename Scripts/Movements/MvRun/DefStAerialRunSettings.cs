@@ -28,7 +28,7 @@ namespace Scripts.Movements.Data
             {
                 Acceleration             = 1f,
                 AccelerationByHighsForce = 0.5f,
-                Control                  = 12.5f,
+                Control                  = 15,
                 BaseSpeed                = 9f,
             };
         }

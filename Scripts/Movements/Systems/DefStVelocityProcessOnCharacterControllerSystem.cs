@@ -2,10 +2,12 @@
 using System.Collections.Generic;
 using LiteNetLib.Utils;
 using package.stormium.core;
+using package.stormium.def.Utilities;
 using package.stormiumteam.networking;
 using package.stormiumteam.networking.ecs;
 using package.stormiumteam.networking.plugins;
 using package.stormiumteam.shared;
+using Scripts;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -29,6 +31,7 @@ namespace package.stormium.def.Movements.Systems
         struct Group
         {
             public ComponentDataArray<StVelocity>        VelocityArray;
+            public ComponentDataArray<CharacterControllerState> States;
             public ComponentArray<CharacterControllerMotor> MotorArray;
             public GameObjectArray                          GameObjects;
             public TransformAccessArray                     Transforms;
@@ -49,20 +52,32 @@ namespace package.stormium.def.Movements.Systems
 
         private int           m_WriterSize;
         private NetDataWriter m_NetDataWriter;
+        private CPhysicGroup m_CharacterGroup;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
-            base.OnCreateManager(capacity);
+            base.OnCreateManager();
             
             m_WriterSize = MessageIdent.HeaderSize + (sizeof(int) * 2) + UnsafeUtility.SizeOf<float3>();
             s_RaycastHits = new RaycastHit[64];
             s_RepairNormalResult = new NativeArray<Vector3>(1, Allocator.Persistent);
         }
 
+        protected override void OnDestroyManager()
+        {
+            s_RepairNormalResult.Dispose();
+        }
+
         protected override void OnUpdate()
         {
             if (!GameServerManagement.IsCurrentlyHosting && IsConnectedOrHosting)
                 return;
+
+            m_CharacterGroup = KnowPhysicGroups.CharacterGroup;
+            
+            // Because we are going to interact with character, we need to disable the group
+            // TODO: We shouldn't do that, the character collision should be disabled before instead.
+            CPhysicSettings.Active.SetCollision(m_CharacterGroup, false);
 
             for (int frameIndex = 0; frameIndex != m_PhysicUpdaterSystem.LastIterationCount; frameIndex++)
             {
@@ -76,16 +91,6 @@ namespace package.stormium.def.Movements.Systems
 
             if (IsConnectedOrHosting)
                 return;
-
-            // TODO: HACK REMOVE THIS
-            var i           = m_Group.Length - 1;
-            var pos         = m_Group.Transforms[i].position;
-            var firstCamera = Object.FindObjectOfType<Camera>();
-
-            pos.y += 1.6f;
-
-            firstCamera.transform.position = pos;
-            firstCamera.transform.rotation = Quaternion.Euler(m_Group.Entities[i].GetComponentData<DefStEntityAimClientInput>().Aim);
         }
 
         private void SimulatePhysicStep(float dt)
@@ -96,24 +101,43 @@ namespace package.stormium.def.Movements.Systems
                 var motor       = m_Group.MotorArray[i];
                 var gameObject  = m_Group.GameObjects[i];
                 var transform   = m_Group.Transforms[i];
+                var slopeLimit = motor.CharacterController.slopeLimit;
 
-                if (!motor.IsGrounded() && !motor.IsStableOnGround && !motor.IsSliding)
+                var layerMask = CPhysicSettings.PhysicInteractionLayerMask;
+                var wasGrounded = motor.IsGrounded(layerMask);
+                var wasStableOnGround = motor.IsStableOnGround;
+                var wasSliding = motor.IsSliding;
+                if (!wasGrounded && !wasStableOnGround && !wasSliding)
                 {
                     oldVelocity += new Vector3(0, Physics.gravity.y, 0) * dt;
-                    motor.CharacterController.stepOffset = 0.05f;
+                    motor.CharacterController.stepOffset = 0.5f;
                 }
-                else if (motor.IsGrounded() && motor.IsStableOnGround && !motor.IsSliding)
+                else if (wasGrounded && wasStableOnGround && !wasSliding)
                 {
                     motor.CharacterController.stepOffset = 0.5f;
-                    oldVelocity.y = -motor.CharacterController.stepOffset;
+                    
+                    //if (oldVelocity.y <= 0) oldVelocity.y = -motor.CharacterController.stepOffset;
+                    if (oldVelocity.y <= 0) oldVelocity.y = 0;
+                }
+                else if (wasSliding)
+                {
+                    //motor.CharacterController.stepOffset = 0f;
                 }
 
-                var wasGrounded = motor.IsGrounded();
+                if (!wasGrounded && Input.GetKey(KeyCode.LeftControl) && oldVelocity.y < -2f)
+                {
+                    oldVelocity.y = Mathf.Lerp(oldVelocity.y, -0.25f, dt * 4f);
+                }
+
                 var oldPos      = transform.position;
                 var velocity    = oldVelocity * dt;
 
+                CPhysicSettings.Active.SetGlobalCollision(gameObject, true);
+                var previousPosition = transform.position;
                 var ev = motor.MoveBy(velocity);
-
+                CPhysicSettings.Active.SetGlobalCollision(gameObject, false);
+                
+                var isGrounded = motor.IsGrounded(layerMask);
                 var correctVelocity = oldVelocity;
 
                 for (var j = ev.EventsStartIndex; j < ev.EventsLength; j++)
@@ -124,9 +148,29 @@ namespace package.stormium.def.Movements.Systems
                         break;
                 }
                 
+                var newPosition      = transform.position;
+                var momentum         = (newPosition - previousPosition) / dt;
+                var previousMomentum = motor.Momentum;
+
+                var isM = false;
+                if (wasGrounded && !isGrounded && previousMomentum.y > 0.5f && correctVelocity.y <= 0.1f)
+                {
+                    isM = true;
+                    
+                    correctVelocity.y += previousMomentum.y;
+
+                    motor.MoveBy(Vector3.up * (previousMomentum.y * dt));
+                }
+                
+                Debug.DrawRay(motor.transform.position, Vector3.up * 0.1f, isM ? Color.magenta : Color.cyan, 5f);
+
                 // Slide on floor (done next frame)
+                Profiler.BeginSample("Slide on floor");
+                Profiler.BeginSample("Get angle");
                 var slideAngle = Vector3.Angle(motor.AngleDir, Vector3.up);
-                if (slideAngle > 45 && slideAngle < 89 && motor.IsGrounded())
+                Debug.DrawRay(motor.transform.position, motor.AngleDir, Color.red, 5);
+                Profiler.EndSample();
+                if (slideAngle > motor.CharacterController.slopeLimit && slideAngle < 80 && isGrounded)
                 {                                      
                     var oldY = correctVelocity.y;
                     
@@ -135,31 +179,55 @@ namespace package.stormium.def.Movements.Systems
                     var leftOverInertia = desiredMotion * 0.5f * dt;
                     
                     correctVelocity   = desiredMotion + leftOverInertia;
-                    correctVelocity.y = oldY - 15 * dt;
-                    correctVelocity.y = Mathf.Clamp(correctVelocity.y, -10, 60);
+                    /*var velocityToChoose = correctVelocity;
+                    if (Math.Abs(velocityToChoose.y) < 0.001)
+                        velocityToChoose.y = -1f;*/
+                    
+                    //correctVelocity = RaycastUtilities.SlideVelocity(velocityToChoose, motor.AngleDir);
+                    //correctVelocity.y = oldY;
+                    correctVelocity += RaycastUtilities.SlideVelocity(new Vector3(0, Physics.gravity.y, 0) * dt * (slideAngle / 90), motor.AngleDir);
+                    
+                    Debug.Log((slideAngle / 90));
+                    //correctVelocity.y = oldY * dt;
+                    //correctVelocity.y = Mathf.Clamp(correctVelocity.y, -10, 60);
                     
                     motor.AngleDir = ProbeGround(motor, transform, motor.AngleDir, 90, 90);
                     
                     motor.IsStableOnGround = false;
                     motor.IsSliding        = true;
+                    //motor.CharacterController.stepOffset = 0f;
                 }
                 else
                 {
-                    motor.IsStableOnGround = motor.IsGrounded();
+                    Profiler.BeginSample("Set properties");
+                    motor.IsStableOnGround = isGrounded;
                     motor.IsSliding        = false;
+                    Profiler.EndSample();
                 }
+                Profiler.EndSample();
 
-                if (motor.IsGrounded())
+                Profiler.BeginSample("Set AngleDir");
+                if (isGrounded)
                 {
                     motor.AngleDir = GetAngleDir(motor, transform);
                 }
-                else if (wasGrounded && !motor.IsGrounded()
-                                     && correctVelocity.y >= -0.5f && correctVelocity.y <= 0)
-                {
+                else if (wasGrounded && !isGrounded && correctVelocity.y < 0.001f)
+                {                    
                     motor.AngleDir = ProbeGround(motor, transform, motor.AngleDir,
-                        45 - Mathf.Clamp(correctVelocity.ToGrid(1).magnitude, 0, 15) * 3 + 15, 45);
+                        slopeLimit - Mathf.Clamp(correctVelocity.ToGrid(1).magnitude, 0, 15) * 3 + 15, slopeLimit);
+                }
+                Profiler.EndSample();
+
+                motor.Momentum = momentum;
+
+                var events = motor.AllColliderHitsInFrame;
+                for (int x = 0; x != events.Count; x++)
+                {
+                    var hitEvent = events[x];
+                    // TODO Fire events
                 }
                 
+                m_Group.States[i] = new CharacterControllerState(motor.IsGrounded(layerMask), motor.IsStableOnGround, motor.IsSliding, motor.AngleDir);
                 m_Group.VelocityArray[i] = new StVelocity(correctVelocity);
             }
         }
@@ -213,6 +281,8 @@ namespace package.stormium.def.Movements.Systems
 
         private Vector3 ProbeGround(CharacterControllerMotor motor, Transform transform, Vector3 previousDirection, float maxAngle, float globalMaxAngle)
         {
+            Debug.Log("Probing");
+            
             var controller = motor.CharacterController;
 
             var worldCenter = transform.position + controller.center;
@@ -220,7 +290,8 @@ namespace package.stormium.def.Movements.Systems
             var highPoint   = lowPoint + new Vector3(0, controller.height, 0);
 
             Profiler.BeginSample("RaycastNonAlloc");
-            var rayLength = Physics.RaycastNonAlloc(lowPoint, Vector3.down, s_RaycastHits, controller.stepOffset);
+            var layerMask = CPhysicSettings.PhysicInteractionLayerMask;
+            var rayLength = Physics.RaycastNonAlloc(lowPoint, Vector3.down, s_RaycastHits, controller.stepOffset, layerMask);
             Profiler.EndSample();
             
             if (previousDirection == Vector3.zero)
@@ -228,13 +299,14 @@ namespace package.stormium.def.Movements.Systems
             
             var highestAngle = 0f;
             var highestDir = previousDirection;
+            var highestY = float.MinValue;
             for (int i = 0; i != rayLength; i++)
             {
                 var ray = s_RaycastHits[i];
                 if (ray.transform == transform)
                     continue;
                 
-                ray.normal = RepairHitSurfaceNormal(ray);
+                //ray.normal = RepairHitSurfaceNormal(ray);
                 
                 var angle = Vector3.Angle(previousDirection, ray.normal);
                 if (angle > highestAngle)
@@ -243,12 +315,17 @@ namespace package.stormium.def.Movements.Systems
                     highestDir   = ray.normal;
                 }
 
-                if (angle > maxAngle || Vector3.Angle(Vector3.up, ray.normal) > globalMaxAngle)
+                if (angle > maxAngle || Vector3.Angle(Vector3.up, ray.normal) > globalMaxAngle
+                    && highestY > ray.point.y)
                     continue;
                 
                 var velocityToAdd = ray.point - lowPoint;
                 
+                CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, true);
                 motor.MoveBy(velocityToAdd);
+                CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, false);
+
+                highestY = ray.point.y;
 
                 motor.IsGroundForcedThisFrame = true;
             }
@@ -258,8 +335,6 @@ namespace package.stormium.def.Movements.Systems
 
         private Vector3 GetAngleDir(CharacterControllerMotor motor, Transform transform)
         {
-            CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, false);
-
             var controller = motor.CharacterController;
             var height     = controller.height;
             var radius     = controller.radius;
@@ -273,23 +348,26 @@ namespace package.stormium.def.Movements.Systems
             var rayLength     = Physics.CapsuleCastNonAlloc(worldCenter, highPoint, radius, Vector3.down, s_RaycastHits, distance, layerMask);
             var smallestAngle = float.MaxValue;
             var smallestDir   = Vector3.down;
-
-            if (rayLength > 0) motor.IsGroundForcedThisFrame = true;
             
+            if (rayLength > 0) motor.IsGroundForcedThisFrame = true;
+
             for (int i = 0; i != rayLength; i++)
             {
                 var ray    = s_RaycastHits[i];
-                var normal = RepairHitSurfaceNormal(ray);
-                var angle = Vector3.Angle(Vector3.up, normal);
+                Physics.Raycast(ray.point + Vector3.up * 0.01f, Vector3.down, out ray, ray.distance + 0.02f);
 
+                var normal = ray.normal;
+                //var normal = RepairHitSurfaceNormal(ray);
+                var angle  = Vector3.Angle(Vector3.up, normal);
+                
+                Debug.DrawRay(ray.point, normal, Color.green, 5);
+                
                 if (angle < smallestAngle)
                 {
                     smallestAngle = angle;
                     smallestDir   = normal;
                 }
             }
-
-            CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, true);
 
             return smallestDir;
         }

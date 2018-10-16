@@ -26,6 +26,7 @@ namespace package.stormium.def.Movements.Systems
         struct VelocityGroup
         {
             public ComponentDataArray<StVelocity> VelocityArray;
+            public ComponentDataArray<NetworkEntity> NetworkArray;
             public EntityArray Entities;
 
             public readonly int Length;
@@ -39,9 +40,9 @@ namespace package.stormium.def.Movements.Systems
         private int           m_WriterSize;
         private NetDataWriter m_NetDataWriter;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
-            base.OnCreateManager(capacity);
+            base.OnCreateManager();
             
             m_WriterSize = MessageIdent.HeaderSize + (sizeof(int) * 2) + UnsafeUtility.SizeOf<float3>();
         }

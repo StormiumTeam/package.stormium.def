@@ -1,12 +1,15 @@
 ﻿using package.stormium.core;
 using package.stormium.def.Movements.Data;
+using package.stormium.def.Utilities;
 using package.stormiumteam.networking.ecs;
 using package.stormiumteam.shared;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Experimental.Input;
+using UnityEngine.Jobs;
 
 namespace package.stormium.def.Movements.Systems
 {
@@ -20,22 +23,32 @@ namespace package.stormium.def.Movements.Systems
             public ComponentDataArray<DefStDodgeOnGroundSettings>             Settings;
             public ComponentDataArray<DefStDodgeInput>                        Inputs;
             public ComponentDataArray<DefStDodgeOnGroundProcessData>          Proccesses;
-            public ComponentArray<CharacterControllerMotor>                   Motors;
+            public ComponentDataArray<CharacterControllerState>                   States;
             public SubtractiveComponent<VoidSystem<DefStDodgeOnGroundProcessSystem>> Void1;
             public EntityArray                                                Entities;
+            public TransformAccessArray Transforms;
 
             public readonly int Length;
         }
 
         [Inject] private Group m_Group;
         [Inject] private PhysicUpdaterSystem m_PhysicUpdaterSystem;
-
+        
         private Vector3         m_CachedDefaultGravity;
+        
+        private Entity m_CmdDoDodge, m_CmdDoDodgeResult;
+
+        protected override void OnCreateManager()
+        {
+            m_CmdDoDodge = CreateCommandTarget(ComponentType.Create<CmdMovement>(), typeof(CmdMvDodge));
+
+            m_CmdDoDodgeResult = CreateCommandResult(typeof(StVelocity));
+        }
 
         protected override void OnUpdate()
         {
             m_CachedDefaultGravity = Physics.gravity;
-
+            
             for (int i = 0; i != m_Group.Length; i++)
             {
                 var entity   = m_Group.Entities[i];
@@ -44,12 +57,13 @@ namespace package.stormium.def.Movements.Systems
                 var setting  = m_Group.Settings[i];
                 var input    = m_Group.Inputs[i];
                 var process  = m_Group.Proccesses[i];
-                var motor    = m_Group.Motors[i];
+                var state    = m_Group.States[i];
+                var transform = m_Group.Transforms[i];
 
-                ProcessItem(ref entity, ref velocity, ref runInput, ref setting, ref input, ref process, motor);
+                ProcessItem(ref entity, ref velocity, ref runInput, ref setting, ref input, ref process, ref state, transform);
                 for (int frameIndex = 0; frameIndex != m_PhysicUpdaterSystem.LastIterationCount; frameIndex++)
                 {
-                    ProcessPhysicItem(m_PhysicUpdaterSystem.LastFixedTimeStep, ref setting, ref input, ref process, ref velocity, motor);
+                    ProcessPhysicItem(m_PhysicUpdaterSystem.LastFixedTimeStep, ref setting, ref input, ref process, ref velocity, ref state);
                 }
 
                 PostUpdateCommands.SetComponent(entity, velocity);
@@ -67,49 +81,50 @@ namespace package.stormium.def.Movements.Systems
             ref DefStDodgeOnGroundSettings    setting,
             ref DefStDodgeInput               input,
             ref DefStDodgeOnGroundProcessData process,
-            CharacterControllerMotor          motor
+            ref CharacterControllerState          state,
+            Transform          transform
         )
         {
-            var doDodge = input.State != InputState.None && process.CooldownBeforeNextDodge <= 0f && motor.IsGrounded();
+            var doDodge = input.State != InputState.None && process.CooldownBeforeNextDodge <= 0f && MvUtils.OnGround(state, velocity);
 
             if (input.TimeBeforeResetState <= 0f)
             {
                 input.State = InputState.None;
             }
 
+            // We expect the developpers to check for staminas or things like that for this command.
+            EntityManager.SetComponentData(m_CmdDoDodge, new EntityCommandTarget(entity));
+            DiffuseCommand(m_CmdDoDodge, m_CmdDoDodgeResult, doDodge, CmdState.Begin);
+
+            doDodge = GetCmdResult(m_CmdDoDodgeResult);
             if (!doDodge)
                 return false;
 
             process.StartFlatSpeed = velocity.Value.ToGrid(1).magnitude;
             
-            var gravity   = GetGravity(entity, setting);
-            var direction = SrtComputeDirection(motor.transform.forward.normalized, motor.transform.rotation, runInput.Direction);
+            var direction = SrtComputeDirection(transform.forward.normalized, transform.rotation, runInput.Direction);
 
             velocity.Value.y = 0f;
 
             velocity.Value = SrtDodge(velocity.Value, direction, setting.AdditiveSpeed, setting.MinSpeed, setting.MaxSpeed);
 
-            velocity.Value -= gravity * setting.VerticalPower;
-
-            motor.MoveBy(Vector3.up * 0.01f);
-            motor.MoveBy(direction * 0.1f);
+            velocity.Value += Vector3.up * setting.VerticalPower;
 
             input.TimeBeforeResetState = -1f;
             input.State                = InputState.None;
 
-            process.StartFlatSpeed = Mathf.Max(process.StartFlatSpeed, setting.MinSpeed);
             process.CooldownBeforeNextDodge = 0.5f;
-            process.InertieDelta = 1f;
+            process.InertieDelta = 0.1f;
             process.Direction               = direction;
             process.IsDodging = 1;
+            process.StartAfterDodgeFlatSpeed = velocity.Value.ToGrid(1).magnitude;
+            
+            // We except developpers to just clean the pre-command phase, and not applying things like reducing stamina...
+            DiffuseCommand(m_CmdDoDodge, m_CmdDoDodgeResult, true, CmdState.End);
             
             // Send dodge message to clients
-            if (IsConnectedOrHosting)
-            {
-                var evEntity = EntityManager.CreateEntity();
-                ServerEntityMgr.NetworkifyAndPush(evEntity, PushEntityOption.CreateEntity);
-                ServerEntityMgr.SyncSetOrAddComponent(evEntity, new DefStDodgeEvent(Time.time, Time.frameCount, entity));
-            }
+            BroadcastNewEntity(PostUpdateCommands, true);
+            PostUpdateCommands.AddComponent(new DefStDodgeEvent(Time.time, Time.frameCount, entity));
 
             return true;
         }
@@ -121,41 +136,36 @@ namespace package.stormium.def.Movements.Systems
             ref DefStDodgeInput               input,
             ref DefStDodgeOnGroundProcessData process,
             ref StVelocity velocity,
-            CharacterControllerMotor          motor
+            ref CharacterControllerState          state
         )
         {
-            if (process.InertieDelta > 0f && math.any(process.Direction != float3.zero))
+            /*if (!state.IsGrounded() && math.any(process.Direction != float3.zero) && process.IsDodging == 1)
             {
-                if (2 == 1)
-                {
-                    var previousVelocity = velocity.Value;
-                    var previousFlatVel  = previousVelocity.ToGrid(1);
-                    var previousSpeed    = Mathf.Max(previousFlatVel.magnitude, settings.MinSpeed) + (process.InertieDelta * dt);
+                var previousVelocity = velocity.Value;
+                var previousFlatVel  = previousVelocity.ToGrid(1);
+                var previousSpeed    = Mathf.Max(previousFlatVel.magnitude, settings.MinSpeed) + (process.InertieDelta * dt);
 
-                    velocity.Value   = math.normalize(process.Direction) * previousSpeed;
-                    velocity.Value.y = previousVelocity.y;
-                }
-                else
-                {
-                    var factor = process.InertieDelta;
+                velocity.Value   = math.normalize(process.Direction) * previousSpeed;
+                velocity.Value.y = previousVelocity.y;
+            }*/
 
-                    motor.MoveBy(process.Direction * factor * dt);
-                }
-            }
-
-            if (motor.IsGrounded() && process.IsDodging == 1)
+            // TODO: Remove hardcoded character slopelimit (45)
+            /*if (MvUtils.OnGround(state, velocity) && Vector3.Angle(state.AngleDir, Vector3.up) < 45 && process.IsDodging == 1)
             {
                 process.IsDodging = 0;
 
                 var oldY = velocity.Value.y;
-                var speed = Mathf.Min(velocity.Value.ToGrid(1).magnitude, process.StartFlatSpeed);
-
-                velocity.Value = velocity.Value.normalized * speed;
+                var addSpeed = Mathf.Max(velocity.Value.ToGrid(1).magnitude - process.StartAfterDodgeFlatSpeed, 0);
+                var speed = Mathf.Min(velocity.Value.ToGrid(1).magnitude, process.StartFlatSpeed + addSpeed);
+                
+                velocity.Value = velocity.Value.ToGrid(1).normalized * speed;
+                
+                Debug.Log("nice");
                 
                 velocity.Value.y = oldY;
-            }
+            }*/
 
-            process.InertieDelta -= motor.IsGrounded() ? dt * 50f : dt;
+            process.InertieDelta -= state.IsGrounded() ? dt * 50f : dt;
             process.CooldownBeforeNextDodge -= dt;
             input.TimeBeforeResetState      -= dt;
         }
@@ -198,7 +208,7 @@ namespace package.stormium.def.Movements.Systems
             velocity.y =  oldY;
 
             var speed = Mathf.Min(Mathf.Max(velocity.ToGrid(1).magnitude, minSpeed), maxSpeed);
-
+            
             velocity = wishDirection * speed;
             velocity.y = oldY;
 

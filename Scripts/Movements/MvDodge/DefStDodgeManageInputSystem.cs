@@ -44,11 +44,11 @@ namespace package.stormium.def.Movements.Systems
 
         private DefStDodgeManageInputClient m_InputClient;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
             Debug.Log("<color='red'>" + GetType().Name + "</color>");
             
-            base.OnCreateManager(capacity);
+            base.OnCreateManager();
 
             m_InputClient = new DefStDodgeManageInputClient();
             m_InputClient.CreateActionMap();
@@ -63,7 +63,7 @@ namespace package.stormium.def.Movements.Systems
                 var netEntity = m_NetworkGroup.NetworkEntities[i];
 
                 if (GameServerManagement.IsCurrentlyHosting) continue;
-                if (!m_NetworkGroup.Entities[i].HasComponent<WeOwnThisEntity>())
+                if (!m_NetworkGroup.Entities[i].HasComponent<ClientDriveData<DefStDodgeInput>>())
                     continue;
 
                 if (shouldDodge)
@@ -132,6 +132,8 @@ namespace package.stormium.def.Movements.Systems
             var msgMgr  = GameServerManagement.Main.LocalInstance.GetMessageManager();
             var msgData = msgMgr.Create(SendDoDodgeMsgId);
             msgData.Put(entity.ToEntity());
+            
+            Debug.Log("Send dodge!");
 
             m_NetworkMessageSystem.InstantSendToAllDefault(entity.GetNetworkInstance(), msgData, DeliveryMethod.ReliableOrdered);
         }

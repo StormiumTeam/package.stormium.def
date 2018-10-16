@@ -1,31 +1,65 @@
 ﻿using package.stormium.core;
 using package.stormium.def.Movements.Data;
+using package.stormium.def.Utilities;
 using package.stormiumteam.shared;
+using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Jobs;
+using UnityEngine.Profiling;
 
 namespace package.stormium.def.Movements.Systems
 {
     [UpdateAfter(typeof(DefStRunManageInputSystem))]
+    [UpdateAfter(typeof(DefStJumpProcessSystem))]
     public class DefStGroundRunProcessSystem : ComponentSystem
     {
         struct Group
         {
-            public ComponentDataArray<StVelocity> Velocities;
-            public ComponentDataArray<DefStGroundRunSettings> Settings;
-            public ComponentDataArray<DefStRunInput> Inputs;
-            public ComponentArray<CharacterControllerMotor> Motors;
+            public ComponentDataArray<StVelocity>                                Velocities;
+            public ComponentDataArray<DefStGroundRunSettings>                    Settings;
+            public ComponentDataArray<DefStRunInput>                             Inputs;
+            public ComponentDataArray<CharacterControllerState>                  State;
+            public TransformAccessArray                                          Transforms;
             public SubtractiveComponent<VoidSystem<DefStGroundRunProcessSystem>> Void1;
 
             public readonly int Length;
         }
 
         [Inject] private PhysicUpdaterSystem m_PhysicUpdaterSystem;
-        [Inject] private Group m_Group;
+        [Inject] private Group               m_Group;
+
+        private NativeArray<quaternion> m_Rotations;
+        private NativeArray<byte>       m_AuthorizedIndexes;
+
+        protected override void OnCreateManager()
+        {
+            m_Rotations         = new NativeArray<quaternion>(0, Allocator.Persistent);
+            m_AuthorizedIndexes = new NativeArray<byte>(0, Allocator.Persistent);
+        }
+
+        protected override void OnDestroyManager()
+        {
+            m_Rotations.Dispose();
+            m_AuthorizedIndexes.Dispose();
+        }
 
         protected override void OnUpdate()
         {
+            if (m_Rotations.Length != m_Group.Length)
+            {
+                m_Rotations.Dispose();
+                m_AuthorizedIndexes.Dispose();
+
+                m_Rotations         = new NativeArray<quaternion>(m_Group.Length, Allocator.Persistent);
+                m_AuthorizedIndexes = new NativeArray<byte>(m_Group.Length, Allocator.Persistent);
+            }
+
+            new JobFillRotation(m_Rotations).Schedule(m_Group.Transforms).Complete();
+
             for (int frameIndex = 0; frameIndex != m_PhysicUpdaterSystem.LastIterationCount; frameIndex++)
             {
                 SimulatePhysicStep(frameIndex, m_PhysicUpdaterSystem.LastFixedTimeStep);
@@ -34,30 +68,25 @@ namespace package.stormium.def.Movements.Systems
 
         private void SimulatePhysicStep(int frameIndex, float dt)
         {
-            for (int i = 0; i != m_Group.Length; i++)
+            /*for (int i = 0; i != m_Group.Length; i++)
             {
-                var velocityData = m_Group.Velocities[i];
-                var input        = m_Group.Inputs[i];
-                var motor        = m_Group.Motors[i];
-                var settings     = m_Group.Settings[i];
+                var motor = m_Group.State[i];
+                var velocity = m_Group.Velocities[i];
 
-                if (!motor.IsGrounded() || motor.IsSliding) continue;
-
-                velocityData.Value = SrtFixNaN(velocityData.Value);
-
-                var direction   = SrtComputeDirection(motor.transform.rotation, input.Direction);
-                var newVelocity = SrtMove(velocityData.Value, direction, settings, motor.IsStableOnGround, dt);
-
-                newVelocity.y = velocityData.Value.y;
-
-                m_Group.Velocities[i] = new StVelocity((Vector3)newVelocity);
+                m_AuthorizedIndexes[i] = (byte)(MvUtils.OnGround(motor, velocity) && !motor.IsSliding ? 1 : 0);
             }
+            */
+            var job = new JobCalculateMovement
+            (
+                m_Group.State, m_Group.Velocities, m_Group.Settings, m_Group.Inputs, m_Rotations, dt
+            );
+            job.Run(m_Group.Length);
         }
-        
+
         // -------------------------------------------------- //
         // TODO: Jobify this part (the bottom uh)
         // ...
-        
+
         /// <summary>
         /// Compute the direction from a rotation and from a given direction
         /// </summary>
@@ -68,7 +97,7 @@ namespace package.stormium.def.Movements.Systems
         {
             return math.normalize(worldRotation * new Vector3(inputDirection.x, 0, inputDirection.y));
         }
-        
+
         /// <summary>
         /// Move the character with the Srt (CPMA based) algorithm.
         /// </summary>
@@ -77,37 +106,51 @@ namespace package.stormium.def.Movements.Systems
         /// <param name="settings">The movement settings</param>
         /// <param name="dt">Delta time</param>
         /// <returns>Return the new position</returns>
-        private static float3 SrtMove(float3 initialVelocity, float3 direction, DefStGroundRunSettings settings, bool isStable, float dt)
+        private static float3 SrtMove(float3 initialVelocity, float3 direction, DefStGroundRunSettings settings, CharacterControllerState state,
+                                      float dt)
         {
             // Fix NaN errors
             direction = SrtFixNaN(direction);
 
             // Set Y axe to zero
             initialVelocity.y = 0;
-            
-            var currentSpeed = math.length(initialVelocity);
+
+            var previousSpeed = math.length(initialVelocity);
             var friction = SrtGetFrictionPower
             (
-                currentSpeed,
+                previousSpeed,
                 settings.FrictionSpeedMin, settings.FrictionSpeedMax,
                 settings.FrictionMin, settings.FrictionMax
             );
 
-            var velocity = SrtApplyFriction(initialVelocity, friction, settings.SurfaceFriction, settings.Acceleration, settings.Deacceleration, dt);
-            var wishSpeed = math.length(direction) * settings.BaseSpeed;
+            var angleInvertedDir = 1 - state.AngleDir.y;
+            if (math.abs(angleInvertedDir) > 0.4f)
+                friction *= math.clamp(math.abs(angleInvertedDir), 0.4f, 1f);
+
+            var velocity = SrtApplyFriction(initialVelocity, direction, friction, settings.SurfaceFriction, settings.Acceleration,
+                settings.Deacceleration, dt);
+            var wishSpeed                         = math.length(direction) * settings.BaseSpeed;
             if (float.IsNaN(wishSpeed)) wishSpeed = 0;
 
             var strafeAngleNormalized = SrtGetStrafeAngleNormalized(direction, math.normalize(initialVelocity));
-            var strafePower = math.max(math.max(1 - strafeAngleNormalized, 0.1f), 0.1f);
-            strafePower = 0.1f;
-            
-            if (wishSpeed > settings.BaseSpeed && wishSpeed < currentSpeed)
+
+            if (wishSpeed > settings.BaseSpeed && wishSpeed < previousSpeed)
             {
-                wishSpeed = math.lerp(currentSpeed, wishSpeed, math.max(math.distance(wishSpeed, currentSpeed), 0) * dt);
+                wishSpeed = math.lerp(previousSpeed, wishSpeed, math.max(math.distance(wishSpeed, previousSpeed), 0) * dt);
             }
 
-            velocity = SrtAccelerate(velocity, direction, wishSpeed, settings.Acceleration, strafePower, dt);
-            
+            if (state.AngleDir.y >= 0) wishSpeed *= math.clamp(state.AngleDir.y + 0.1f, 0.1f, 1f);
+            velocity = SrtAccelerate(velocity, direction, wishSpeed, settings.Acceleration, math.min(strafeAngleNormalized, 0.25f), dt);
+
+            var nextSpeed = math.length(math.float3(velocity.x, 0, velocity.z));
+            if (previousSpeed > nextSpeed && nextSpeed < settings.BaseSpeed
+                                          && strafeAngleNormalized > 0.1f && strafeAngleNormalized < 0.9f)
+            {
+                velocity.y = 0;
+
+                velocity = Vector3.Normalize(velocity) * math.lerp(nextSpeed, previousSpeed, math.max(1 - strafeAngleNormalized, 0.8f));
+            }
+
             return velocity;
         }
 
@@ -154,11 +197,12 @@ namespace package.stormium.def.Movements.Systems
         /// <param name="deaccel">The deaceleration of the player</param>
         /// <param name="dt">The delta time</param>
         /// <returns>Return a new velocity from the friction</returns>
-        private static float3 SrtApplyFriction(float3 velocity, float friction, float groundFriction, float accel, float deaccel, float dt)
+        private static float3 SrtApplyFriction(float3 velocity, float3 direction, float friction, float groundFriction, float accel, float deaccel, float dt)
         {
             var speed    = math.length(velocity);
             var control  = speed < accel ? deaccel : speed;
             var drop     = control * groundFriction * dt * friction;
+            
             var newspeed = math.max(speed - drop, 0);
 
             if (speed > 0)
@@ -179,7 +223,7 @@ namespace package.stormium.def.Movements.Systems
         /// <returns>The new velocity from the acceleration</returns>
         private static float3 SrtAccelerate(float3 velocity, float3 wishDirection, float wishSpeed, float accelPower, float strafePower, float dt)
         {
-            var speed = math.lerp(math.length(velocity), math.dot(velocity, wishDirection), strafePower);
+            var speed    = math.lerp(math.length(velocity), math.dot(velocity, wishDirection), strafePower);
             var addSpeed = wishSpeed - speed;
             if (addSpeed <= 0)
                 return velocity;
@@ -187,12 +231,74 @@ namespace package.stormium.def.Movements.Systems
             var factor = 1 - (1 / (wishSpeed / speed));
             if (float.IsNaN(factor) || factor <= 0.3f)
                 factor = 0.3f;
-            
+
             var accelSpeed = math.min((accelPower * factor) * dt * wishSpeed, addSpeed);
             if (float.IsNaN(accelSpeed))
                 accelSpeed = 0f;
 
             return velocity + (accelSpeed * wishDirection);
+        }
+
+        [BurstCompile]
+        private struct JobFillRotation : IJobParallelForTransform
+        {
+            private NativeArray<quaternion> m_Rotations;
+
+            public void Execute(int index, TransformAccess transform)
+            {
+                m_Rotations[index] = transform.rotation;
+            }
+
+            public JobFillRotation(NativeArray<quaternion> rotations)
+            {
+                m_Rotations = rotations;
+            }
+        }
+
+        //[BurstCompile]
+        private struct JobCalculateMovement : IJobParallelFor
+        {
+            private            ComponentDataArray<StVelocity>               Velocities;
+            [ReadOnly] private ComponentDataArray<CharacterControllerState> States;
+            [ReadOnly] private ComponentDataArray<DefStGroundRunSettings>   Settings;
+            [ReadOnly] private ComponentDataArray<DefStRunInput>            Inputs;
+            [ReadOnly] private NativeArray<quaternion>                      Rotations;
+            [ReadOnly] private float                                        DeltaTime;
+
+            public void Execute(int index)
+            {
+                if (States[index].GroundFlags == 0)
+                    return;
+
+                var rotation     = Rotations[index];
+                var setting      = Settings[index];
+                var input        = Inputs[index];
+                var velocityData = Velocities[index];
+
+                velocityData.Value = SrtFixNaN(velocityData.Value);
+
+                var direction   = SrtComputeDirection(rotation, input.Direction);
+                var newVelocity = SrtMove(velocityData.Value, direction, setting, States[index], DeltaTime);
+
+                newVelocity.y = velocityData.Value.y;
+
+                Velocities[index] = new StVelocity(newVelocity);
+            }
+
+            public JobCalculateMovement(ComponentDataArray<CharacterControllerState> states,
+                                        ComponentDataArray<StVelocity>               velocities,
+                                        ComponentDataArray<DefStGroundRunSettings>   settings,
+                                        ComponentDataArray<DefStRunInput>            inputses,
+                                        NativeArray<quaternion>                      rotations,
+                                        float                                        deltaTime)
+            {
+                States     = states;
+                Velocities = velocities;
+                Settings   = settings;
+                Inputs     = inputses;
+                Rotations  = rotations;
+                DeltaTime  = deltaTime;
+            }
         }
     }
 }

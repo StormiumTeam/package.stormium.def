@@ -1,14 +1,16 @@
 ﻿using package.stormium.def.Movements.Data;
 using package.stormium.def.Utilities;
 using package.stormiumteam.shared;
+using Scripts.Movements.MvWallBounce;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Experimental.Input;
+using UnityEngine.Jobs;
 
 namespace package.stormium.def.Movements.Systems
 {
-    public class DefStWallJumpProcessSystem : ComponentSystem
+    public class DefStWallJumpProcessSystem : GameComponentSystem
     {
         private const float DefaultCooldown = 0.1f;
         
@@ -19,9 +21,10 @@ namespace package.stormium.def.Movements.Systems
             public ComponentDataArray<DefStRunInput>                        RunInputs;
             public ComponentDataArray<DefStJumpInput>                       Inputs;
             public ComponentDataArray<DefStWallJumpProcessData>             Proccesses;
-            public ComponentArray<CharacterControllerMotor>                 Motors;
+            public ComponentDataArray<CharacterControllerState>                 States;
             public SubtractiveComponent<VoidSystem<DefStJumpProcessSystem>> Void1;
             public EntityArray                                              Entities;
+            public TransformAccessArray Transforms;
 
             public readonly int Length;
         }
@@ -42,9 +45,10 @@ namespace package.stormium.def.Movements.Systems
                 var runInput = m_Group.RunInputs[i];
                 var input    = m_Group.Inputs[i];
                 var process = m_Group.Proccesses[i];
-                var motor = m_Group.Motors[i];
+                var state = m_Group.States[i];
+                var transform = m_Group.Transforms[i];
 
-                ProcessItem(ref entity, ref velocity, ref setting, ref runInput, ref input, ref process, motor);
+                ProcessItem(ref entity, ref velocity, ref setting, ref runInput, ref input, ref process, ref state, transform);
                 
                 PostUpdateCommands.SetComponent(entity, velocity);
                 PostUpdateCommands.SetComponent(entity, setting);
@@ -61,42 +65,43 @@ namespace package.stormium.def.Movements.Systems
             ref DefStRunInput runInput,
             ref DefStJumpInput       input,
             ref DefStWallJumpProcessData process,
-            CharacterControllerMotor motor
+            ref CharacterControllerState state,
+            Transform transform
         )
         {
-            var action = input.State != InputState.None && !motor.IsGrounded() && Time.time > process.TimeBeforeNextWJ;
+            var action = input.State != InputState.None && !MvUtils.OnGround(state, velocity) && Time.time > process.TimeBeforeNextWJ;
             if (!action)
                 return false;
 
-            var fwd = motor.transform.forward;
-            var pos = motor.transform.position + new Vector3(0, motor.CharacterController.stepOffset + 0.1f);
-            var rot = motor.transform.rotation;
-            var rd = motor.CharacterController.radius + 0.075f;
-            var sw = motor.CharacterController.skinWidth + 0.025f;
-            var height = motor.CharacterController.height - motor.CharacterController.stepOffset;
+            var originalVelocity = velocity.Value;
+            var fwd = transform.forward;
+            var pos = transform.position + new Vector3(0, 0.4f + 0.1f); // hardcoded value (stepoffset)
+            var rot = transform.rotation;
+            var rd = 0.3f + 0.075f; // (radius)
+            var sw = 0.07f + 0.025f; // hardcoded value (skinwidth)
+            var height = 2f - 0.4f; // harcoded value (height and stepOffset)
             var subheight = (height * 0.75f) - 0.005f;
             
-            CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, false);
+            CPhysicSettings.Active.SetGlobalCollision(transform.gameObject, false);
 
             var direction = (Vector3)SrtComputeDirection(fwd, rot, runInput.Direction);
-            var rayTrace = UtilityWallRayTrace.RayTrace(ref direction, ref pos, ref rd, ref sw, ref height, ref subheight, motor.CharacterController);
+            var rayTrace = UtilityWallRayTrace.RayTrace(ref direction, ref pos, ref rd, ref sw, ref height, ref subheight, transform.GetComponent<Collider>());
             
             Debug.DrawRay(rayTrace.point, rayTrace.normal, Color.red, 10);
             
-            CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, true);
+            CPhysicSettings.Active.SetGlobalCollision(transform.gameObject, true);
 
             var success = rayTrace.normal != Vector3.zero && Mathf.Abs(rayTrace.normal.y) < 0.2f;
             if (success)
             {
                 rayTrace.normal = rayTrace.normal.ToGrid(1).normalized;
                 
-                var gravity = GetGravity(entity, setting);
                 velocity.Value = RaycastUtilities.SlideVelocityNoYChange(velocity.Value, rayTrace.normal);
 
-                velocity.Value -= gravity * (setting.JumpPower * 0.98f);
+                velocity.Value.y = math.max(math.min(velocity.Value.y + 6.5f, 12f), 0);
 
                 var previousVelocity = velocity.Value;
-                var bounceDir = rayTrace.normal * 6.5f;
+                var bounceDir = rayTrace.normal * 6f;
                 var minSpeed = bounceDir.magnitude;
                 
                 velocity.Value += bounceDir;
@@ -112,6 +117,9 @@ namespace package.stormium.def.Movements.Systems
 
                 input.TimeBeforeResetState = -1f;
                 input.State = InputState.None;
+                
+                BroadcastNewEntity(PostUpdateCommands, true);
+                PostUpdateCommands.AddComponent(new DefStWallJumpEvent(Time.time, Time.frameCount, entity, originalVelocity, rayTrace.normal));
             }
 
             return success;
