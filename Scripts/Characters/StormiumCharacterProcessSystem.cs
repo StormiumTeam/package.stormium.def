@@ -72,7 +72,10 @@ namespace package.stormium.def.characters
                     var currSpeed = velocity.Value.ToGrid(1).magnitude;
                     var currY = velocity.Value.y;
                     
-                    var speedToRemove = clamp(-process.PrevVelocity.y * 0.2f, 0, currSpeed * 0.2f);
+                    var speedToRemove = clamp((-process.PrevVelocity.y - 25) * 0.5f, 0, currSpeed * 0.5f);
+                    speedToRemove = 0f;
+                    
+                    Debug.Log(speedToRemove);
 
                     velocity.Value = velocity.Value.normalized * max(currSpeed - speedToRemove, 0);
                     velocity.Value.y = currY;
@@ -80,7 +83,7 @@ namespace package.stormium.def.characters
                 
                 if (process.PrevGroundFlags == 0 && state.GroundFlags == 0)
                 {
-                    process.AirControlScale = clamp(process.AirControlScale - dt, 0, 1);
+                    process.AirControlScale = clamp(process.AirControlScale - (dt * 0.25f), 0, 1);
                 }
 
                 if (Input.GetKeyDown(KeyCode.F))
@@ -96,7 +99,7 @@ namespace package.stormium.def.characters
                 m_CharacterGroup.AerialRunSettingsArray[i] = new DefStAerialRunSettings
                 {
                     Acceleration             = 1f,
-                    AccelerationByHighsForce = 1f,
+                    AccelerationByHighsForce = 0.0025f,
                     BaseSpeed                = data.BaseSpeed,
                     Control                  = lerp(data.AirControl, data.AirControlGroundStart, process.AirControlScale)
                 };

@@ -149,10 +149,10 @@ namespace package.stormium.def.characters
             
             
             var characterController = GameObject.GetComponent<CharacterController>();
-            characterController.center     = Vector3.up;
-            characterController.radius     = 0.3f;
+            characterController.center     = Vector3.up * 0.9f;
+            characterController.radius     = 0.4f;
             characterController.stepOffset = 0.4f;
-            characterController.height     = 2f;
+            characterController.height     = 2f * 0.9f;
             characterController.slopeLimit     = 75;
             characterController.detectCollisions = false;
             

@@ -102,6 +102,7 @@ namespace package.stormium.def.Movements.Systems
                 var gameObject  = m_Group.GameObjects[i];
                 var transform   = m_Group.Transforms[i];
                 var slopeLimit = motor.CharacterController.slopeLimit;
+                var entity = m_Group.Entities[i];
 
                 var layerMask = CPhysicSettings.PhysicInteractionLayerMask;
                 var wasGrounded = motor.IsGrounded(layerMask);
@@ -117,11 +118,11 @@ namespace package.stormium.def.Movements.Systems
                     motor.CharacterController.stepOffset = 0.5f;
                     
                     //if (oldVelocity.y <= 0) oldVelocity.y = -motor.CharacterController.stepOffset;
-                    if (oldVelocity.y <= 0) oldVelocity.y = 0;
+                    if (oldVelocity.y <= 0) oldVelocity.y = -1;
                 }
-                else if (wasSliding)
+                else 
                 {
-                    //motor.CharacterController.stepOffset = 0f;
+                    oldVelocity.y = -1;
                 }
 
                 if (!wasGrounded && Input.GetKey(KeyCode.LeftControl) && oldVelocity.y < -2f)
@@ -152,18 +153,17 @@ namespace package.stormium.def.Movements.Systems
                 var momentum         = (newPosition - previousPosition) / dt;
                 var previousMomentum = motor.Momentum;
 
-                var isM = false;
-                if (wasGrounded && !isGrounded && previousMomentum.y > 0.5f && correctVelocity.y <= 0.1f)
+                // This is wrong, it should be done when sliding.
+                // In real life, we don't keep the height momentum when running.
+                /*if (wasGrounded && !isGrounded && previousMomentum.y > 0.5f && correctVelocity.y <= 0.1f)
                 {
                     isM = true;
                     
                     correctVelocity.y += previousMomentum.y;
 
                     motor.MoveBy(Vector3.up * (previousMomentum.y * dt));
-                }
+                }*/
                 
-                Debug.DrawRay(motor.transform.position, Vector3.up * 0.1f, isM ? Color.magenta : Color.cyan, 5f);
-
                 // Slide on floor (done next frame)
                 Profiler.BeginSample("Slide on floor");
                 Profiler.BeginSample("Get angle");
@@ -171,7 +171,8 @@ namespace package.stormium.def.Movements.Systems
                 Debug.DrawRay(motor.transform.position, motor.AngleDir, Color.red, 5);
                 Profiler.EndSample();
                 if (slideAngle > motor.CharacterController.slopeLimit && slideAngle < 80 && isGrounded)
-                {                                      
+                {                    
+                    Debug.Log("Sliding");
                     var oldY = correctVelocity.y;
                     
                     var undesiredMotion = motor.AngleDir * Vector3.Dot(correctVelocity, motor.AngleDir);
@@ -210,6 +211,7 @@ namespace package.stormium.def.Movements.Systems
                 if (isGrounded)
                 {
                     motor.AngleDir = GetAngleDir(motor, transform);
+                    correctVelocity.y = Mathf.Max(correctVelocity.y, 0);
                 }
                 else if (wasGrounded && !isGrounded && correctVelocity.y < 0.001f)
                 {                    
@@ -225,6 +227,11 @@ namespace package.stormium.def.Movements.Systems
                 {
                     var hitEvent = events[x];
                     // TODO Fire events
+                }
+
+                if (motor.IsGrounded(layerMask) && !wasGrounded)
+                {
+                 MvDelegateEvents.InvokeCharacterLand(entity);   
                 }
                 
                 m_Group.States[i] = new CharacterControllerState(motor.IsGrounded(layerMask), motor.IsStableOnGround, motor.IsSliding, motor.AngleDir);
@@ -281,8 +288,6 @@ namespace package.stormium.def.Movements.Systems
 
         private Vector3 ProbeGround(CharacterControllerMotor motor, Transform transform, Vector3 previousDirection, float maxAngle, float globalMaxAngle)
         {
-            Debug.Log("Probing");
-            
             var controller = motor.CharacterController;
 
             var worldCenter = transform.position + controller.center;
@@ -331,6 +336,36 @@ namespace package.stormium.def.Movements.Systems
             }
 
             return highestDir;
+        }
+        
+        private bool CheckGround(CharacterControllerMotor motor, Transform transform)
+        {
+            var controller = motor.CharacterController;
+
+            var worldCenter = transform.position + controller.center;
+            var lowPoint    = worldCenter - new Vector3(0, controller.height * 0.5f, 0);
+
+            Profiler.BeginSample("RaycastNonAlloc");
+            var layerMask = CPhysicSettings.PhysicInteractionLayerMask;
+            var rayLength = Physics.RaycastNonAlloc(lowPoint, Vector3.down, s_RaycastHits, 0.0001f, layerMask);
+            Profiler.EndSample();
+            
+            for (int i = 0; i != rayLength; i++)
+            {
+                var ray = s_RaycastHits[i];
+                if (ray.transform == transform)
+                    continue;
+                
+                var velocityToAdd = ray.point - lowPoint;
+                
+                CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, true);
+                motor.MoveBy(velocityToAdd);
+                CPhysicSettings.Active.SetGlobalCollision(motor.gameObject, false);
+
+                return true;
+            }
+
+            return false;
         }
 
         private Vector3 GetAngleDir(CharacterControllerMotor motor, Transform transform)

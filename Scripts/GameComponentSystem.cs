@@ -10,6 +10,7 @@ using package.stormiumteam.networking.plugins;
 using package.stormiumteam.shared;
 using Scripts;
 using Unity.Entities;
+using UnityEngine;
 
 namespace package.stormium.def
 {
@@ -34,6 +35,16 @@ namespace package.stormium.def
             AppEventSystem.SubscribeToAll(this);
         }
 
+        protected NetDataWriter CreateMessage(MessageIdent messageIdent)
+        {
+            if (IsConnectedOrHosting)
+            {
+                return GameServerManagement.Main.LocalInstance.GetMessageManager().Create(messageIdent);
+            }
+
+            return null;
+        }
+
         protected void ServerSendToPeer(NetPeer peer, NetDataWriter data, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
         {
             peer.Send(data, deliveryMethod);
@@ -42,6 +53,12 @@ namespace package.stormium.def
         protected void ServerSendToAll(NetDataWriter data, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
         {
             var manager = GameServerManagement.Main.ServerInstance.GetDefaultChannel().Manager;
+            manager.SendToAll(data, deliveryMethod);
+        }
+
+        protected void SendToServer(NetDataWriter data, DeliveryMethod deliveryMethod = DeliveryMethod.ReliableOrdered)
+        {
+            var manager = GameServerManagement.Main.LocalNetManager;
             manager.SendToAll(data, deliveryMethod);
         }
         

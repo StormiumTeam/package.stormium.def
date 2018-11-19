@@ -76,18 +76,24 @@ namespace package.stormium.def.Movements.Systems
             Transform transform
         )
         {
-            var doJump = input.State != InputState.None && (process.ComboCtx < setting.MaxCombo && process.CooldownBeforeNextJump <= 0f)
+            if (MvUtils.OnGround(state, velocity))
+            {
+                process.ComboCtx = 0;
+            }
+
+            if (input.ContinueJump == 0)
+            {
+                process.NeedToChain = 0;
+            }
+
+            var inputCanJump = input.State == InputState.Down || (input.ContinueJump == 1 && process.NeedToChain == 1);
+            var doJump = inputCanJump && (process.ComboCtx < setting.MaxCombo && process.CooldownBeforeNextJump <= 0f)
                                                         && (MvUtils.OnGround(state, velocity) || process.ComboCtx > 0);
             var airJump = doJump && !state.IsGrounded() && !state.IsSliding();
-
+            
             if (input.TimeBeforeResetState <= 0f)
             {
                 input.State = InputState.None;
-            }
-
-            if (state.IsStableOnGround())
-            {
-                process.ComboCtx = 0;
             }
             
             process.CooldownBeforeNextJump -= Time.deltaTime;
@@ -98,7 +104,9 @@ namespace package.stormium.def.Movements.Systems
 
             doJump = GetCmdResult(m_CmdDoJumpResult);
             if (!doJump)
+            {
                 return false;
+            }
 
             var direction = SrtComputeDirection(transform.forward, transform.rotation, runInput.Direction);
             var strafeAngle = SrtGetStrafeAngleNormalized(direction, velocity.Value);
@@ -106,27 +114,43 @@ namespace package.stormium.def.Movements.Systems
             {
                 strafeAngle = 0f;
             }
+
+            if (input.State == InputState.Down)
+                process.NeedToChain = 1;
             
             velocity.Value.y = math.max(velocity.Value.y, 0);
-            if (!airJump) velocity.Value += Vector3.up * setting.JumpPower;
+            if (!airJump)
+            {
+                var motor = transform.GetComponent<CharacterControllerMotor>();
+
+                velocity.Value += Vector3.up * (setting.JumpPower * (input.State != InputState.Down ? 0.75f : 1f));
+                //if (motor.Momentum.y > 0) velocity.Value += Vector3.up * (motor.Momentum.normalized.y * 6f);
+            }
             else velocity.Value = Vector3.up * setting.JumpPower;
 
             if (airJump)
             {
                 velocity.Value = math.lerp(velocity.Value, SrtAirDash(velocity.Value, direction), 1f);
             }
-            else
+            else if (input.State != InputState.Down)
             {
-                //velocity.Value += (Vector3)(direction * (strafeAngle * 3.5f));
+                velocity.Value += (Vector3)(direction * (strafeAngle * 2.5f));
+                
                 var oldY = velocity.Value.y;
                 var currSpeed = velocity.Value.ToGrid(1).magnitude;
-                var newSpeed = math.min(currSpeed + strafeAngle * 12.5f, math.max(currSpeed, 17.5f));
-                velocity.Value = velocity.Value.normalized * newSpeed;
+                var newSpeed = math.min(currSpeed + strafeAngle * 1.75f, math.max(currSpeed, 17.5f));
+                velocity.Value = velocity.Value.ToGrid(1).normalized * newSpeed;
+                velocity.Value.y = oldY;
+            }
+            else
+            {
+                var oldY = velocity.Value.y;
+                //velocity.Value = velocity.Value.ToGrid(1).normalized * (velocity.Value.ToGrid(1).magnitude - 2.5f);
                 velocity.Value.y = oldY;
             }
 
             input.TimeBeforeResetState = -1f;
-            input.State = InputState.None;
+            input.State = InputState.Pressed;
 
             process.ComboCtx++;
             process.CooldownBeforeNextJump = 0.1f;
@@ -137,6 +161,8 @@ namespace package.stormium.def.Movements.Systems
             // Send event to clients
             BroadcastNewEntity(PostUpdateCommands, true);
             PostUpdateCommands.AddComponent(new DefStJumpEvent(Time.time, Time.frameCount, entity));
+            
+            MvDelegateEvents.InvokeCharacterJump(entity);
             
             return true;
         }

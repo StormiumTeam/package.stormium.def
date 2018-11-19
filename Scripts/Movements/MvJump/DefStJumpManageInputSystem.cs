@@ -86,8 +86,12 @@ namespace package.stormium.def.Movements.Systems
 
                 if (shouldJump)
                 {
-                    EntityJump(m_LocalGroup.Entities[i]);
+                    EntityJump(m_LocalGroup.Entities[i], m_InputClient.IsPressed);
                 }
+
+                var input = m_LocalGroup.Inputs[i];
+                input.ContinueJump = m_InputClient.IsPressed ? (byte)1 : (byte)0;
+                m_LocalGroup.Inputs[i] = input;
             }
         }
 
@@ -115,11 +119,11 @@ namespace package.stormium.def.Movements.Systems
                     return;
                 }
                 
-                EntityJump(entity);
+                EntityJump(entity, true);
             }
         }
 
-        private void EntityJump(Entity entity)
+        private void EntityJump(Entity entity, bool isPressed)
         {
             if (entity.HasComponent<DefStJumpInput>())
             {
@@ -146,16 +150,23 @@ namespace package.stormium.def.Movements.Systems
     {
         public int LastFrameInput;
         public InputAction    MoveAction;
+        public bool IsPressed;
 
         public void CreateActionMap()
         {
-            MoveAction = new InputAction("jump", "<Keyboard>/space", "press");
+            MoveAction = new InputAction("jump", "<Keyboard>/space");
         }
 
         public void Enable()
         {   
             MoveAction.Enable();
             MoveAction.performed += MoveActionOnPerformed;
+            MoveAction.cancelled += MoveActionOnCancel;
+        }
+
+        private void MoveActionOnCancel(InputAction.CallbackContext context)
+        {
+            IsPressed = false;
         }
 
         public void Disable()
@@ -166,8 +177,11 @@ namespace package.stormium.def.Movements.Systems
 
         private void MoveActionOnPerformed(InputAction.CallbackContext context)
         {
+            Debug.Log("kek");
+            
             var value = context.ReadValue<float>();
-            LastFrameInput = Time.frameCount;
+            if (value >= 0.8f) LastFrameInput = Time.frameCount;
+            IsPressed = value >= 0.8f;
         }
     }
 }

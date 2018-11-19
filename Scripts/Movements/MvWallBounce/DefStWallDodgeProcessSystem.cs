@@ -116,7 +116,7 @@ namespace package.stormium.def.Movements.Systems
                 
                 velocity.Value = dirInertie.ToGrid(1).normalized * (minSpeed);
 
-                velocity.Value.y = Mathf.Max(oldY + 3, 0);
+                velocity.Value.y = Mathf.Max(oldY + 2, 0);
                 
                 process.TimeBeforeNextWD = Time.time + DefaultCooldown;
 

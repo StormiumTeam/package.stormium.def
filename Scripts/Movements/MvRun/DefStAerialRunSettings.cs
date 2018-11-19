@@ -27,7 +27,7 @@ namespace Scripts.Movements.Data
             return new DefStAerialRunSettings
             {
                 Acceleration             = 1f,
-                AccelerationByHighsForce = 0.5f,
+                AccelerationByHighsForce = 0f,
                 Control                  = 15,
                 BaseSpeed                = 9f,
             };

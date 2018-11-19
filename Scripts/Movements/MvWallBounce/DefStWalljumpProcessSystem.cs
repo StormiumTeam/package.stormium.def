@@ -69,7 +69,7 @@ namespace package.stormium.def.Movements.Systems
             Transform transform
         )
         {
-            var action = input.State != InputState.None && !MvUtils.OnGround(state, velocity) && Time.time > process.TimeBeforeNextWJ;
+            var action = input.State == InputState.Down && !MvUtils.OnGround(state, velocity) && Time.time > process.TimeBeforeNextWJ;
             if (!action)
                 return false;
 
@@ -120,6 +120,8 @@ namespace package.stormium.def.Movements.Systems
                 
                 BroadcastNewEntity(PostUpdateCommands, true);
                 PostUpdateCommands.AddComponent(new DefStWallJumpEvent(Time.time, Time.frameCount, entity, originalVelocity, rayTrace.normal));
+                
+                MvDelegateEvents.InvokeCharacterWalljump(entity);
             }
 
             return success;

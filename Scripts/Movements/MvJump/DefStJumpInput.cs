@@ -25,12 +25,14 @@ namespace package.stormium.def.Movements.Data
         public float Value01;
         public float TimeBeforeResetState;
         public InputState State;
+        public byte ContinueJump;
 
         public DefStJumpInput(float value01, float timeBeforeResetState)
         {
             Value01 = value01;
             State = InputState.None;
             TimeBeforeResetState = timeBeforeResetState;
+            ContinueJump = 0;
         }
         
         public DefStJumpInput(InputState state, float timeBeforeResetState)
@@ -38,6 +40,7 @@ namespace package.stormium.def.Movements.Data
             Value01 = state != InputState.None ? 1f : 0f;
             State   = state;
             TimeBeforeResetState = timeBeforeResetState;
+            ContinueJump = 0;
         }
     }
 }

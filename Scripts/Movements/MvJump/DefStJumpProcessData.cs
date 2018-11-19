@@ -6,11 +6,13 @@ namespace package.stormium.def.Movements.Data
     {
         public int ComboCtx;
         public float CooldownBeforeNextJump;
+        public byte NeedToChain;
 
-        public DefStJumpProcessData(int comboCtx, float cooldownBeforeNextJump)
+        public DefStJumpProcessData(int comboCtx, float cooldownBeforeNextJump, byte needToChain)
         {
             ComboCtx = comboCtx;
             CooldownBeforeNextJump = cooldownBeforeNextJump;
+            NeedToChain = needToChain;
         }
     }
 }

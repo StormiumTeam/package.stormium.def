@@ -48,7 +48,7 @@ namespace package.stormium.def.Movements.Systems
 
         private DefStEntityAimManageInputClient m_InputClient;
 
-        public float Sensivity = 3f;
+        public float Sensivity = 1.5f;
         
         protected override void OnCreateManager()
         {

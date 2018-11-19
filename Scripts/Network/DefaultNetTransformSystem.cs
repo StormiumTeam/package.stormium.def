@@ -162,13 +162,15 @@ namespace package.stormium.def.Network
 
         protected override void OnUpdate()
         {
+            if (m_Gms.IsCurrentlyHosting) return;
+            
             var delta = Time.deltaTime;
             var pingInt = m_Gms.Main?.ServerInstance?.PeerInstance?.Peer?.Ping ?? 0;
             pingInt = math.max(pingInt, m_Gms?.Main?.ServerInstance?.Get<ConnectionNetManagerConfig>().ConfigUpdateTime ?? 0);
             var ping = math.max(pingInt * 0.001f, delta * 1.1f);
 
             ping = math.min(ping, 0.05f);
-            
+
             var needToReinject = false;
             for (int i = 0; i != m_WithoutBufferGroupInterpolator.Length; i++)
             {
@@ -436,6 +438,8 @@ namespace package.stormium.def.Network
         [Inject] private PositionGroup        m_PositionGroup;
         [Inject] private RotationGroup        m_RotationGroup;
 
+        public float TimeBeforeSendingData = 0f;
+
         protected override void OnCreateManager()
         {
             m_AppEventSystem.SubscribeToAll(this);
@@ -444,45 +448,36 @@ namespace package.stormium.def.Network
         protected override void OnUpdate()
         {
             if (!m_GameServerManagement.IsCurrentlyHosting) return;
+            if (TimeBeforeSendingData > 0f)
+            {
+                TimeBeforeSendingData -= Time.deltaTime;
+                return;
+            }
 
             var manager     = m_GameServerManagement.Main.LocalNetManager;
             var netInstance = m_GameServerManagement.Main.LocalInstance;
             var msgMgr      = netInstance.GetMessageManager();
 
+            var positionMsg = msgMgr.Create(DefaultNetTransformConstants.MsgUpdatePosition);
+            positionMsg.Put(Time.time);
+            positionMsg.Put(m_PositionGroup.Length);
             for (int i = 0; i != m_PositionGroup.Length; i++)
             {
                 var netEntity = m_PositionGroup.N1[i];
                 if (netEntity.InstanceId != netInstance.Id)
                     continue;
 
-                var msg = msgMgr.Create(DefaultNetTransformConstants.MsgUpdatePosition);
-                msg.Put(new Entity() {Index = netEntity.NetId, Version = netEntity.NetVersion});
-                msg.Put(Time.time);
-                msg.Put(m_PositionGroup.Local[i].Value);
-                msg.Put(m_PositionGroup.Local[i].Value - m_PositionGroup.Network[i].Target);
+                positionMsg.Put(new Entity {Index = netEntity.NetId, Version = netEntity.NetVersion});
+                positionMsg.Put(m_PositionGroup.Local[i].Value);
+                positionMsg.Put(m_PositionGroup.Local[i].Value - m_PositionGroup.Network[i].Target);
 
                 m_PositionGroup.Network[i] = new NetPosition()
                 {
                     Target = m_PositionGroup.Local[i].Value
                 };
-
-                /*foreach (var peer in manager)
-                {
-                    var peerInstance = peer.Tag as NetPeerInstance;
-                    var user         = peerInstance.NetUser;
-                    var userEntity   = peerInstance.GetUserManager().GetEntity(user);
-                    var conTransform = peerInstance.Get<DefaultNetTransformSystemConnection>();
-
-                    ref var peerDelay = ref conTransform.PositionDelay;
-                    var     pingDelay = math.max(peer.Ping, m_GameServerManagement.Main.LocalNetManager.UpdateTime) * 0.001f;
-                    if (peerDelay < Time.time + pingDelay)
-                    {
-                        peerDelay = Time.time;
-                        peer.Send(msg, DeliveryMethod.Unreliable);
-                    }
-                }*/
-                manager.SendToAll(msg, DeliveryMethod.Unreliable);
             }
+            
+            manager.SendToAll(positionMsg, DeliveryMethod.Unreliable);
 
             for (int i = 0; i != m_RotationGroup.Length; i++)
             {
@@ -515,6 +510,89 @@ namespace package.stormium.def.Network
                 }*/
                 manager.SendToAll(msg, DeliveryMethod.Unreliable);
             }
+
+            TimeBeforeSendingData = 0.01f;
+        }
+
+        void ReadEntityPosition(int index, float timestamp, ConnectionEntityManager conEntityMgr, MessageReader reader, NetPeerInstance peerInstance)
+        {
+            var entity = conEntityMgr.GetEntity(reader.GetEntity());
+
+            var position = reader.Data.GetVec3();
+            var velocity = reader.Data.GetVec3();
+
+            if (!entity.HasComponent<NetSnapshotPosition>())
+            {
+                Vector3 oldPosition = entity.GetComponentData<NetPosition>().Target;
+                var     movDir      = (position - oldPosition).normalized * 0.001f;
+
+                var predictedPosition = position + (movDir * peerInstance.Get<ConnectionNetManagerConfig>().ConfigUpdateTime);
+                var oldProgress       = entity.GetComponentData<NetPosition>().DeltaProgress;
+                entity.SetOrAddComponentData(new NetPosition
+                {
+                    Target        = position,
+                    Predicted     = predictedPosition,
+                    DeltaProgress = Mathf.Lerp(oldProgress, 0, 0.5f)
+                });
+
+                if (entity.HasComponent<NetPositionInterpolatorBuffer>() && entity.HasComponent<NetPositionInterpolator>())
+                {
+                    var bufferArray = EntityManager.GetBuffer<NetPositionInterpolatorBuffer>(entity);
+
+                    // Too much elements, remove some
+                    while (bufferArray.Length > 10)
+                    {
+                        bufferArray.RemoveAt(0);
+                    }
+
+                    bufferArray.Add(new NetPositionInterpolatorBuffer(timestamp, Time.time, position));
+
+                    var interpolator = EntityManager.GetComponentData<NetPositionInterpolator>(entity);
+                    interpolator.LatestPosition  = position;
+                    interpolator.LatestTimestamp = timestamp;
+                    EntityManager.SetComponentData(entity, interpolator);
+                }
+
+                if (entity.HasComponent<NetPositionDeadReckoning>() && entity.HasComponent<NetPositionDeadReckoningBuffer>())
+                {
+                    var bufferArray = EntityManager.GetBuffer<NetPositionDeadReckoningBuffer>(entity);
+
+                    while (bufferArray.Length > 2)
+                        bufferArray.RemoveAt(0);
+
+                    bufferArray.Add(new NetPositionDeadReckoningBuffer(timestamp, position, velocity));
+                }
+            }
+            else
+            {
+                var netDelta   = EntityManager.GetSharedComponentData<NetSnapshotPosition>(entity);
+                var history    = netDelta.DeltaPositions;
+                var dtDuration = entity.GetComponentData<NetPosition>().DeltaProgress;
+                while (history.Count > 0 && dtDuration > 0)
+                {
+                    if (dtDuration >= history[0].Delta)
+                    {
+                        dtDuration -= history[0].Delta;
+                        history.RemoveAt(0);
+                    }
+                    else
+                    {
+                        var t     = 1 - dtDuration / history[0].Delta;
+                        var frame = history[0];
+                        frame.Delta -= dtDuration;
+                        frame.Value *= t;
+                        history[0]  =  frame;
+                    }
+                }
+
+                var predictedPosition = (float3) position;
+                foreach (var frame in history)
+                {
+                    predictedPosition += frame.Value;
+                }
+
+                entity.SetOrAddComponentData(new NetPosition {Target = position, Predicted = predictedPosition, DeltaProgress = dtDuration});
+            }
         }
 
         void EventReceiveData.IEv.Callback(EventReceiveData.Arguments args)
@@ -527,83 +605,13 @@ namespace package.stormium.def.Network
             
             var msg = conMsgMgr.GetPattern(args.Reader);
             if (msg == DefaultNetTransformConstants.MsgUpdatePosition)
-            {                
-                var entity = conEntityMgr.GetEntity(args.Reader.GetEntity());
+            {               
                 var timestamp = args.Reader.Data.GetFloat();
-                var position = args.Reader.Data.GetVec3();
-                var velocity = args.Reader.Data.GetVec3();
+                var length = args.Reader.Data.GetInt();
 
-                if (!entity.HasComponent<NetSnapshotPosition>())
+                for (int i = 0; i != length; i++)
                 {
-                    Vector3 oldPosition = entity.GetComponentData<NetPosition>().Target;
-                    var movDir = (position - oldPosition).normalized * 0.001f;
-                    
-                    var predictedPosition = position + (movDir * args.PeerInstance.Get<ConnectionNetManagerConfig>().ConfigUpdateTime);
-                    var oldProgress = entity.GetComponentData<NetPosition>().DeltaProgress;
-                    entity.SetOrAddComponentData(new NetPosition
-                    {
-                        Target = position, 
-                        Predicted = predictedPosition,
-                        DeltaProgress = Mathf.Lerp(oldProgress, 0, 0.5f)
-                    });
-
-                    if (entity.HasComponent<NetPositionInterpolatorBuffer>() && entity.HasComponent<NetPositionInterpolator>())
-                    {
-                        var bufferArray = EntityManager.GetBuffer<NetPositionInterpolatorBuffer>(entity);
-                        
-                        // Too much elements, remove some
-                        while (bufferArray.Length > 10)
-                        {
-                            bufferArray.RemoveAt(0);
-                        }
-                        
-                        bufferArray.Add(new NetPositionInterpolatorBuffer(timestamp, Time.time, position));
-
-                        var interpolator = EntityManager.GetComponentData<NetPositionInterpolator>(entity);
-                        interpolator.LatestPosition = position;
-                        interpolator.LatestTimestamp = timestamp;
-                        EntityManager.SetComponentData(entity, interpolator);
-                    }
-
-                    if (entity.HasComponent<NetPositionDeadReckoning>() && entity.HasComponent<NetPositionDeadReckoningBuffer>())
-                    {
-                        var bufferArray = EntityManager.GetBuffer<NetPositionDeadReckoningBuffer>(entity);
-                        
-                        while (bufferArray.Length > 2)
-                            bufferArray.RemoveAt(0);
-                        
-                        bufferArray.Add(new NetPositionDeadReckoningBuffer(timestamp, position, velocity));
-                    }
-                }
-                else
-                {
-                    var netDelta   = EntityManager.GetSharedComponentData<NetSnapshotPosition>(entity);
-                    var history    = netDelta.DeltaPositions;
-                    var dtDuration = entity.GetComponentData<NetPosition>().DeltaProgress;
-                    while (history.Count > 0 && dtDuration > 0)
-                    {
-                        if (dtDuration >= history[0].Delta)
-                        {
-                            dtDuration -= history[0].Delta;
-                            history.RemoveAt(0);
-                        }
-                        else
-                        {
-                            var t     = 1 - dtDuration / history[0].Delta;
-                            var frame = history[0];
-                            frame.Delta -= dtDuration;
-                            frame.Value *= t;
-                            history[0]  =  frame;
-                        }
-                    }
-                    
-                    var predictedPosition = (float3)position;
-                    foreach (var frame in history)
-                    {
-                        predictedPosition += frame.Value;
-                    }
-                    
-                    entity.SetOrAddComponentData(new NetPosition {Target = position, Predicted = predictedPosition, DeltaProgress = dtDuration});
+                    ReadEntityPosition(i, timestamp, conEntityMgr, args.Reader, args.PeerInstance);
                 }
             }
             else if (msg == DefaultNetTransformConstants.MsgUpdateRotation)
@@ -612,7 +620,6 @@ namespace package.stormium.def.Network
                 var x = args.Reader.Data.GetFloat();
                 var y = args.Reader.Data.GetFloat();
                 var z = args.Reader.Data.GetFloat();
-                //var w = math.sqrt(1 - (x * x) - (y * y) - (z * z));
                 var w = args.Reader.Data.GetFloat();
 
                 entity.SetOrAddComponentData(new NetRotation() {Value = math.quaternion(x, y, z, w)});

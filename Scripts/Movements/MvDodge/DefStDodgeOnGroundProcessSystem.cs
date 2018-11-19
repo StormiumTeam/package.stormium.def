@@ -106,8 +106,16 @@ namespace package.stormium.def.Movements.Systems
 
             velocity.Value.y = 0f;
 
-            velocity.Value = SrtDodge(velocity.Value, direction, setting.AdditiveSpeed, setting.MinSpeed, setting.MaxSpeed);
+            var addVelocity = SrtDodge(velocity.Value, direction, setting.AdditiveSpeed, setting.MinSpeed, setting.MaxSpeed);
+            var momentum = transform.GetComponent<CharacterControllerMotor>().Momentum;
 
+            if (Vector3.Dot(velocity.Value.normalized, math.normalizesafe(addVelocity)) >= 0.9f)
+            {
+                addVelocity = (momentum.normalized + ((Vector3)addVelocity).normalized).normalized * math.length(addVelocity);
+                Debug.Log(addVelocity);
+            }
+
+            velocity.Value = addVelocity;
             velocity.Value += Vector3.up * setting.VerticalPower;
 
             input.TimeBeforeResetState = -1f;
@@ -125,6 +133,8 @@ namespace package.stormium.def.Movements.Systems
             // Send dodge message to clients
             BroadcastNewEntity(PostUpdateCommands, true);
             PostUpdateCommands.AddComponent(new DefStDodgeEvent(Time.time, Time.frameCount, entity));
+            
+            MvDelegateEvents.InvokeCharacterDodge(entity);
 
             return true;
         }

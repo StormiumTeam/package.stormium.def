@@ -16,7 +16,7 @@ namespace package.stormium.def.Movements.Data
         {
             return new DefStJumpSettings()
             {
-                JumpPower = 6.5f,
+                JumpPower = 8f,
                 MaxCombo  = 1
             };
         }

@@ -18,9 +18,9 @@ namespace package.stormium.def.Movements.Data
         {
             return new DefStDodgeOnGroundSettings()
             {
-                VerticalPower = 3f,
-                AdditiveSpeed = 1f,
-                MinSpeed      = 16.25f,
+                VerticalPower = 4f,
+                AdditiveSpeed = 1.5f,
+                MinSpeed      = 16f,
                 MaxSpeed      = 20f,
             };
         }

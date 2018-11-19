@@ -91,10 +91,10 @@ namespace package.stormium.def.Movements.Systems
             var velocity = initialVelocity;
 
             velocity = SrtAirAccelerate(velocity, direction, settings.Acceleration, settings.Control, dt);
-            var velocityByHighs = SrtClampSpeed(velocity, initialVelocity, settings.BaseSpeed);
             var finalVelocity = SrtClampSpeed(math.float3(velocity.x, 0, velocity.z), gridVelocity, settings.BaseSpeed);
+            var addSpeedFromHeight = math.clamp(-initialVelocity.y * (settings.AccelerationByHighsForce), 0, 1);
             
-            return math.lerp(finalVelocity, velocityByHighs, settings.AccelerationByHighsForce);
+            return math.normalizesafe(finalVelocity) * (math.length(finalVelocity) + addSpeedFromHeight);
         }
 
         private static float3 SrtFixNaN(float3 original)

@@ -50,23 +50,29 @@ namespace package.stormium.def
         /// </summary>
         public float BaseSpeed;
 
+        /// <summary>
+        /// The sprint speed (Recommanded value: 12f)
+        /// </summary>
+        public float SprintSpeed;
+
         public GroundFallDamage FallDamage;
 
         public static DefStGroundRunSettings NewBase()
         {
             return new DefStGroundRunSettings
             {
-                FrictionSpeedMin = 10f,
+                FrictionSpeedMin = 12f,
                 FrictionSpeedMax = 25f,
 
                 FrictionMin = 0.25f,
                 FrictionMax = 1f,
 
-                SurfaceFriction = 6f,
+                SurfaceFriction = 75f,
 
-                Acceleration   = 40f,
-                Deacceleration = 10f,
-                BaseSpeed      = 9.25f,
+                Acceleration   = 75f,
+                Deacceleration = 25f,
+                BaseSpeed      = 8f,
+                SprintSpeed = 12f,
                 
                 FallDamage = GroundFallDamage.LoseSpeed
             };

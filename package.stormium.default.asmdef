@@ -1,6 +1,8 @@
 {
     "name": "package.stormium.default",
     "references": [
+        "Unity.Addressables",
+        "Unity.ResourceManager",
         "package.guerro.shared",
         "package.stormium.core",
         "package.stormiumteam.networking",
