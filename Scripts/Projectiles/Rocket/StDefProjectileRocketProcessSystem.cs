@@ -91,13 +91,15 @@ namespace package.stormium.def.Projectiles
         protected override void OnUpdate()
         {
             var physicUpdater = World.Active.GetOrCreateManager<PhysicUpdaterSystem>();
+            var hostSystem = World.Active.GetOrCreateManager<GameHostSystem>();
+            var serverInfo = World.Active.GetOrCreateManager<ServerManagement>().GetServerInfo();
 
-            if (!GameLaunch.IsServer)
+            if (hostSystem.IsClient(serverInfo))
             {
                 ProcessClient(physicUpdater.LastFixedTimeStep, physicUpdater.LastIterationCount);
             }
 
-            if (CanExecuteServerActions)
+            if (hostSystem.CanExecuteServerActions(serverInfo))
             {
                 ProcessServer(physicUpdater.LastFixedTimeStep, physicUpdater.LastIterationCount);
             }
@@ -255,6 +257,10 @@ namespace package.stormium.def.Projectiles
                 var clientEntity = GetEntity(serverEntity);
 
                 Debug.Log($"Destroying projectile... c: {clientEntity}, s: {serverEntity}");
+
+                var projGO = ClientProjectileRocketExplosion[0];
+                projGO.transform.position = clientEntity.GetComponentData<Position>().Value;
+                projGO.GetComponentInChildren<ParticleSystem>().Play(true);
                 
                 ServerEntityMgr.DestroyEntity(serverEntity);
                 ecb.DestroyEntity(clientEntity);

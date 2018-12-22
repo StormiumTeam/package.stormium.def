@@ -112,7 +112,7 @@ namespace package.stormium.def.Movements.Systems
             var strafeAngle = SrtGetStrafeAngleNormalized(direction, velocity.Value);
             if (math.all(runInput.Direction == float2.zero))
             {
-                strafeAngle = 0f;
+                strafeAngle *= 0.5f;
             }
 
             if (input.State == InputState.Down)
@@ -134,11 +134,11 @@ namespace package.stormium.def.Movements.Systems
             }
             else if (input.State != InputState.Down)
             {
-                velocity.Value += (Vector3)(direction * (strafeAngle * 2.5f));
+                velocity.Value += (Vector3)(direction * (strafeAngle * 5f));
                 
                 var oldY = velocity.Value.y;
                 var currSpeed = velocity.Value.ToGrid(1).magnitude;
-                var newSpeed = math.min(currSpeed + strafeAngle * 1.75f, math.max(currSpeed, 17.5f));
+                var newSpeed = math.min(currSpeed + strafeAngle * 2f, math.max(currSpeed, 18f));
                 velocity.Value = velocity.Value.ToGrid(1).normalized * newSpeed;
                 velocity.Value.y = oldY;
             }
