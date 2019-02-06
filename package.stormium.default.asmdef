@@ -3,6 +3,7 @@
     "references": [
         "Unity.Addressables",
         "Unity.ResourceManager",
+        "Unity.RenderPipelines.HighDefinition.Runtime",
         "package.guerro.shared",
         "package.stormium.core",
         "package.stormiumteam.networking",
@@ -11,6 +12,7 @@
         "Unity.Entities",
         "Unity.Entities.Hybrid",
         "Unity.Transforms",
+        "Unity.Transforms.Hybrid",
         "Unity.Mathematics",
         "Unity.Collections",
         "Unity.Jobs",
