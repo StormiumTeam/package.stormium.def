@@ -14,36 +14,56 @@ using TransformChanged = StormiumShared.Core.Networking.DataChanged<Stormium.Def
 
 namespace Stormium.Default.States
 {
-    public class SyncSimpleTransformState : SnapshotEntityDataManualStreamer<TransformState>
+    public class SyncSimpleTransformState : SnapshotEntityDataManualStreamer<TransformState, SyncSimpleTransformState.WritePayload, SyncSimpleTransformState.ReadPayload>
     {
-        protected override void WriteDataForEntity(int index, Entity entity, ref DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
+        public struct WritePayload : IWriteEntityDataPayload
         {
-            var state = EntityManager.GetComponentData<TransformState>(entity);
+            public ComponentDataFromEntity<TransformState> States;
             
-            data.WriteValue((half3) state.Position);
-            data.WriteValue((half4) state.Rotation.value);
+            public void Write(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
+            {
+                var state = States[entity];
+            
+                data.WriteValue((half3) state.Position);
+                data.WriteValue((half4) state.Rotation.value);
+            }
+        }
+        
+        public struct ReadPayload : IReadEntityDataPayload
+        {
+            public EntityManager EntityManager;
+            
+            public void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
+            {
+                TransformState state;
+
+                state.Position = data.ReadValue<half3>();
+                state.Rotation = (float4) data.ReadValue<half4>();
+
+                if (EntityManager.HasComponent<InterpolationBuffer>(entity))
+                {
+                    var buffer = EntityManager.GetBuffer<InterpolationBuffer>(entity);
+                    buffer.Add(new InterpolationBuffer(state, runtime.Header.SnapshotIdx, runtime.Header.GameTime.Tick));
+
+                    var interData = EntityManager.GetComponentData<InterpolationData>(entity);
+                    interData.Instance = sender.Client;
+                    EntityManager.SetComponentData<InterpolationData>(entity, interData);
+                
+                    return;
+                }
+
+                EntityManager.SetComponentData(entity, state);
+            }
         }
 
-        protected override void ReadDataForEntity(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
+        protected override void UpdatePayloadW(ref WritePayload current)
         {
-            TransformState state;
-
-            state.Position = data.ReadValue<half3>();
-            state.Rotation = (float4) data.ReadValue<half4>();
-
-            if (EntityManager.HasComponent<InterpolationBuffer>(entity))
-            {
-                var buffer = EntityManager.GetBuffer<InterpolationBuffer>(entity);
-                buffer.Add(new InterpolationBuffer(state, runtime.Header.SnapshotIdx, runtime.Header.GameTime.Tick));
-
-                var interData = EntityManager.GetComponentData<InterpolationData>(entity);
-                interData.Instance = sender.Client;
-                EntityManager.SetComponentData<InterpolationData>(entity, interData);
-                
-                return;
-            }
-
-            EntityManager.SetComponentData(entity, state);
+            current.States = States;
+        }
+        
+        protected override void UpdatePayloadR(ref ReadPayload current)
+        {
+            current.EntityManager = EntityManager;
         }
     }
 }

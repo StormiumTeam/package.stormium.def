@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using package.stormium.def.Kits.ProKit;
 using Runtime;
+using Runtime.Components;
 using Runtime.Data;
 using StandardAssets.Characters.Physics;
 using Stormium.Core;
@@ -51,7 +52,7 @@ namespace Stormium.Default.Tests
 
         public override Entity SpawnEntity(Entity origin, StSnapshotRuntime snapshotRuntime)
         {
-            var gameObject = new GameObject("ToSet", typeof(Rigidbody), typeof(CapsuleCollider), typeof(OpenCharacterController));
+            var gameObject = new GameObject("ToSet", typeof(Rigidbody), typeof(CapsuleCollider), typeof(OpenCharacterController), typeof(CustomShape));
             var goe = gameObject.AddComponent<GameObjectEntity>();
 
             EntityManager.AddComponents(goe.Entity, m_Components);
@@ -67,8 +68,8 @@ namespace Stormium.Default.Tests
 
             gameObject.AddComponent<DestroyGameObjectOnEntityDestroyed>();
 
-            var cFlags = snapshotRuntime.Header.Sender.Flags;
-            EntityManager.SetComponentData(goe.Entity, cFlags == SnapshotFlags.Local ? new TransformStateDirection(Dir.ConvertToState) : new TransformStateDirection(Dir.ConvertFromState));
+            var cf = snapshotRuntime.Header.Sender.Flags;
+            EntityManager.SetComponentData(goe.Entity, cf == SnapshotFlags.Local ? new TransformStateDirection(Dir.ConvertToState) : new TransformStateDirection(Dir.ConvertFromState));
 
             gameObject.name = $"TestCharacter(o={origin}, s={goe.Entity})";
             

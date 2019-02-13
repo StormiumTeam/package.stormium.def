@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.shared;
+using Runtime;
 using Stormium.Core;
 using Stormium.Default.GameModes;
 using Stormium.Default.States;
@@ -16,70 +17,29 @@ using UnityEngine.Rendering;
 
 namespace Stormium.Default.Tests 
 {
-    public static unsafe class TestComp<T>
-        where T : unmanaged
-    {
-        public unsafe delegate void u(void* d, void* r);
-        
-        public static void TestGeneric(void* data, void* result)
-        {
-            UnsafeUtility.MemCpy(result, data, sizeof(T));
-        }
-    }
-    
+    //[DisableAutoCreation]
     public class TestDmMultiPlayer : ComponentSystem, INativeEventOnGUI
     {
-        public NetworkManager NetworkMgr;
+        public StormiumGameServerManager ServerMgr;
         public AppEventSystem AppEventSystem;
         public Entity         GameModeEntity;
         
         // Network related...
-        public Entity HostEntity;
         public string HostAddr = "127.0.0.1";
         public int    HostPort = 8590;
 
         protected override void OnCreateManager()
         {
-            NetworkMgr     = World.GetOrCreateManager<NetworkManager>();
+            ServerMgr = World.GetOrCreateManager<StormiumGameServerManager>();
             AppEventSystem = World.GetOrCreateManager<AppEventSystem>(); 
 
             AppEventSystem.SubscribeToAll(this);
-
-            Application.targetFrameRate = 64;
+             
+            Application.targetFrameRate = 150;
         }
-
-        delegate void k<T>(T value, out T nv) where T : struct;
-        delegate void n(int value, out int nv);
-        public unsafe delegate void u(void* d, void* r);
 
         protected override unsafe void OnUpdate()
         {
-            if (Input.GetKeyDown(KeyCode.E))
-            {
-                var dg = BurstCompiler.CompileDelegate<k<int>>(Test);
-                dg(8, out var val);
-                Debug.Log(val);
-            }
-
-            if (Input.GetKeyDown(KeyCode.G))
-            {
-                var dg = BurstCompiler.CompileDelegate<TestComp<int>.u>(TestComp<int>.TestGeneric);
-                using (var value = new UnsafeAllocation<int>(Allocator.Temp, 8))
-                using (var result = new UnsafeAllocation<int>(Allocator.Temp, 16))
-                {
-                    dg(value.Data, result.Data);
-
-                    UnsafeUtility.CopyPtrToStructure(result.Data, out int resultNumber);
-                    
-                    Debug.Log(resultNumber);
-                }
-            }
-            if (Input.GetKeyDown(KeyCode.N))
-            {
-                var dg = BurstCompiler.CompileDelegate<n>(TestNoGeneric);
-                dg(8, out var val);
-                Debug.Log(val);
-            }
         }
         
         public static void TestNoGeneric(int value, out int newVal)
@@ -104,20 +64,18 @@ namespace Stormium.Default.Tests
                 GUILayout.Label("TestSystem Actions:");
                 GUILayout.Space(1);
                 GUILayout.Label($"DT={gameTime.DeltaTick}ms");
-                
-                var networkMgr = World.GetExistingManager<NetworkManager>();
 
-                if (!EntityManager.Exists(HostEntity))
-                    DoConnectAndCreate(networkMgr);
+                if (!EntityManager.Exists(ServerMgr.HostEntity))
+                    DoConnectAndCreate();
                 else
                 {
-                    DoCancelOrStop(networkMgr);
+                    DoCancelOrStop();
                 }
             }
         }
 
 
-        public void DoConnectAndCreate(NetworkManager networkMgr)
+        public void DoConnectAndCreate()
         {
             using (new GUILayout.HorizontalScope())
             {
@@ -137,54 +95,50 @@ namespace Stormium.Default.Tests
             if (GUILayout.Button("Connect"))
             {
                 var targetEp = new IPEndPoint(IPAddress.Parse(HostAddr), HostPort);
-                var r = networkMgr.StartClient(targetEp);
-
-                HostEntity = r.ClientInstanceEntity;
+                if (!ServerMgr.ConnectToServer(targetEp))
+                    Debug.LogError("Couldn't connect to a server. endpoint=" + targetEp);
             }
 
             if (GUILayout.Button("Create"))
             {
-                var localEp = new IPEndPoint(IPAddress.Any, HostPort);
-                var r       = networkMgr.StartServer(localEp);
+                Application.targetFrameRate = 100;
 
-                HostEntity = r.Entity;
-                
+                if (!ServerMgr.LaunchServer(HostPort))
+                    Debug.LogError("Couldn't launch a server. port=" + HostPort);
+
                 GameModeEntity = EntityManager.CreateEntity
                 (
                     ComponentType.Create<DeathMatchData>(),
-                    ComponentType.Create<SimulateEntity>()
+                    ComponentType.Create<EntityAuthority>()
                 );
-                
+
 #if UNITY_EDITOR
                 EntityManager.SetName(GameModeEntity, "DeathMatch GameMode");
 #endif
             }
         }
 
-        public void DoCancelOrStop(NetworkManager networkMgr)
+        public void DoCancelOrStop()
         {
-            var isValid = EntityManager.HasComponent(HostEntity, typeof(ValidInstanceTag));
+            var connectedInstanceBuffer = EntityManager.GetBuffer<ConnectedInstance>(ServerMgr.HostEntity);
+
+            GUILayout.Space(5);
+            for (var i = 0; i != connectedInstanceBuffer.Length; i++)
+            {
+                var connectedInstance = connectedInstanceBuffer[i];
+                if (!EntityManager.Exists(connectedInstance.Entity) || !EntityManager.HasComponent(connectedInstance.Entity, typeof(NetworkInstanceData)))
+                    continue;
+
+                var data = EntityManager.GetComponentData<NetworkInstanceData>(connectedInstance.Entity);
+                var cs   = data.Commands.ConnectionStatus;
+                GUILayout.Label($"Id={connectedInstance.Connection.Id}, Type={data.InstanceType}, Ping={cs.ping}, InKB/s={cs.inBytesPerSecond * 0.0005f}, OutKB/s={cs.outBytesPerSecond * 0.0005f}");
+            }
+            GUILayout.Space(5);
+            
+            var isValid = EntityManager.HasComponent(ServerMgr.HostEntity, typeof(ValidInstanceTag));
             if (GUILayout.Button(isValid ? "Stop" : "Cancel"))
             {
-                HostEntity = default;
-                networkMgr.StopAll();
-            }
-
-            if (EntityManager.Exists(HostEntity))
-            {
-                var connectedInstanceBuffer = EntityManager.GetBuffer<ConnectedInstance>(HostEntity);
-
-                GUILayout.Space(5);
-                for (var i = 0; i != connectedInstanceBuffer.Length; i++)
-                {
-                    var connectedInstance = connectedInstanceBuffer[i];
-                    if (!EntityManager.Exists(connectedInstance.Entity) || !EntityManager.HasComponent(connectedInstance.Entity, typeof(NetworkInstanceData)))
-                        continue;
-
-                    var data = EntityManager.GetComponentData<NetworkInstanceData>(connectedInstance.Entity);
-                    var cs   = data.Commands.ConnectionStatus;
-                    GUILayout.Label($"Id={connectedInstance.Connection.Id}, Type={data.InstanceType}, Ping={cs.ping}, InKB/s={cs.inBytesPerSecond * 0.0005f}, OutKB/s={cs.outBytesPerSecond * 0.0005f}");
-                }
+                ServerMgr.StopEverything();
             }
         }
     }

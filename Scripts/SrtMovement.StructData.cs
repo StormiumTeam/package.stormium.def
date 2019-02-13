@@ -31,6 +31,8 @@ namespace package.stormium.def
         /// </summary>
         public float SurfaceFriction;
 
+        public float DecayBaseSpeedFriction;
+
         /// <summary>
         ///  The acceleration speed (Recommanded value: 0.2f)
         /// </summary>
@@ -62,6 +64,7 @@ namespace package.stormium.def
                 FrictionMax = 1f,
 
                 SurfaceFriction = 60f,
+                DecayBaseSpeedFriction = 10f,
 
                 Acceleration   = 75f,
                 Deacceleration = 20f,
@@ -97,7 +100,7 @@ namespace package.stormium.def
             {
                 Acceleration             = 1f,
                 AccelerationByHighsForce = 0f,
-                Control                  = 32.5f,
+                Control                  = 35f,
                 BaseSpeed                = 9f,
             };
         }

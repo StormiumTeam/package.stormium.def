@@ -87,7 +87,7 @@ namespace package.stormium.def
 
             if (wishSpeed > settings.BaseSpeed && wishSpeed < previousSpeed)
             {
-                wishSpeed = math.lerp(previousSpeed, wishSpeed, math.max(math.distance(wishSpeed, previousSpeed), 0) * dt);
+                wishSpeed = math.lerp(previousSpeed, wishSpeed, settings.DecayBaseSpeedFriction * dt);
             }
 
             if (input.y > 0.5f)
@@ -100,7 +100,8 @@ namespace package.stormium.def
                 }
             }
 
-            velocity = GroundAccelerate(velocity, direction, wishSpeed, settings.Acceleration, math.min(strafeAngleNormalized, 0.25f), dt);
+            velocity = GroundAccelerate
+                (velocity, direction, wishSpeed, settings.Acceleration, math.min(strafeAngleNormalized, 0.25f), settings.DecayBaseSpeedFriction, dt);
 
             var nextSpeed = math.length(math.float3(velocity.x, 0, velocity.z));
             if (previousSpeed > nextSpeed && nextSpeed < settings.BaseSpeed
@@ -185,7 +186,7 @@ namespace package.stormium.def
         /// <param name="strafePower">The strafe power (think of CPMA movement)</param>
         /// <param name="dt">The delta time</param>
         /// <returns>The new velocity from the acceleration</returns>
-        public static float3 GroundAccelerate(float3 velocity, float3 wishDirection, float wishSpeed, float accelPower, float strafePower, float dt)
+        public static float3 GroundAccelerate(float3 velocity, float3 wishDirection, float wishSpeed, float accelPower, float strafePower, float decay, float dt)
         {
             var speed = math.lerp(math.length(velocity), math.dot(velocity, wishDirection), strafePower);
 
@@ -205,7 +206,7 @@ namespace package.stormium.def
                 return Vector3.MoveTowards(math.normalizesafe(velocity), wishDirection, dt * c * accelPower) * nextSpeed;
             }
 
-            return Vector3.ClampMagnitude(velocity + wishDirection * (accelPower * dt), speed);
+            return Vector3.ClampMagnitude(velocity + wishDirection * (accelPower * dt), math.lerp(speed, wishSpeed, decay * dt));
         }
 
         /// <summary>

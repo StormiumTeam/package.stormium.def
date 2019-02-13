@@ -55,24 +55,25 @@ namespace package.stormium.def.Kits.ProKit
                 // Fix the velocity in case.
                 velocity.Value = SrtMovement.SrtFixNaN(velocity.Value);
 
+                var canJump      = startedFromGround && inputState.QueueJump == 1; // todo: queue jump instead
+                var canDodge     = startedFromGround && inputState.QueueDodge == 1 && !canJump;
+                var canGroundRun = startedFromGround && !canJump && !canDodge;
+                var canAerialRun = !startedFromGround;
+
                 // -------------------------------------------------------- //
                 // Update gravity.
                 if (controller.isGrounded)
                 {
                     velocity.Value.y     = 0;
-                    behaviorData.AirTime = 0f;
+                    if (!canJump) 
+                        behaviorData.AirTime = 0f;
                 }
                 else
                 {
                     velocity.Value.y     -= 15f * time.DeltaTime;
                     behaviorData.AirTime += time.DeltaTime;
                 }
-
-                var canJump      = startedFromGround && inputState.QueueJump == 1; // todo: queue jump instead
-                var canDodge     = startedFromGround && inputState.QueueDodge == 1 && !canJump;
-                var canGroundRun = startedFromGround && !canJump && !canDodge;
-                var canAerialRun = !startedFromGround;
-
+                
                 // -------------------------------------------------------- //
                 // Ground Run function.
                 if (canGroundRun)
@@ -84,7 +85,7 @@ namespace package.stormium.def.Kits.ProKit
                 // Aerial run function.
                 if (canAerialRun)
                 {
-                    var control     = math.clamp(1 - math.clamp(behaviorData.AirTime * 0.5f, 0, 1), 0.5f, 1);
+                    var control     = math.clamp(1 - math.clamp(behaviorData.AirTime * 0.5f, 0, 1), 0.25f, 1);
                     var airSettings = behaviorData.AerialSettings;
                     airSettings.Control *= control;
 
@@ -96,7 +97,7 @@ namespace package.stormium.def.Kits.ProKit
                 if (canJump)
                 {
                     var strafeAngle = SrtMovement.GetStrafeAngleNormalized(direction, math.float3(velocity.Value.x, 0, velocity.Value.z));
-                    velocity.Value += direction * (strafeAngle * 3.5f);
+                    velocity.Value += direction * (strafeAngle * 0.5f);
 
                     // TODO: Queue a new jump (For now, we don't queue it, we do it now)
                     velocity.Value.y = 6;
@@ -110,7 +111,7 @@ namespace package.stormium.def.Kits.ProKit
                     
                     velocity.Value = SrtMovement.GroundDodge(velocity.Value, directionFwd, 0.5f, 15f, 16.5f);
 
-                    controller.Move(math.normalizesafe(velocity.Value) * 0.25f);
+                    controller.Move(math.normalizesafe(velocity.Value) * 0.5f);
 
                     velocity.Value.y = 3f;
 

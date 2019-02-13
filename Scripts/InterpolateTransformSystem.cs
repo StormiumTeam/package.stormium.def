@@ -7,7 +7,6 @@ using UnityEngine;
 
 namespace Scripts
 {
-	[UpdateBefore(typeof(CopyOrPasteTransformState))]
 	public class InterpolateTransformSystem : ComponentSystem
 	{
 		protected override void OnUpdate()

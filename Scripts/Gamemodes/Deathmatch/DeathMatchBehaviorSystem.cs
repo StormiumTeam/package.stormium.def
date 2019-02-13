@@ -1,4 +1,3 @@
-using package.stormium.core.gamemodes;
 using package.stormiumteam.networking;
 using package.stormiumteam.networking.runtime.lowlevel;
 using Stormium.Core;
@@ -37,7 +36,7 @@ namespace Stormium.Default.GameModes
             m_SimulatedGameModes = GetComponentGroup
             (
                 ComponentType.Create<DeathMatchData>(),
-                ComponentType.Create<SimulateEntity>()
+                ComponentType.Create<EntityAuthority>()
             );
         }
 
@@ -79,7 +78,7 @@ namespace Stormium.Default.GameModes
         {
         }
 
-        public DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime, ref JobHandle jobHandle)
+        public DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime)
         {
             var buffer = new DataBufferWriter(0, Allocator.Temp);
 
@@ -92,9 +91,8 @@ namespace Stormium.Default.GameModes
             return buffer;
         }
 
-        public void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData, ref JobHandle jobHandle)
+        public void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData)
         {
-            throw new System.NotImplementedException();
         }
     }
 }

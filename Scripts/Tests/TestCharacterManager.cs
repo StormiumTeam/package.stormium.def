@@ -25,12 +25,16 @@ namespace Stormium.Default.Tests
             
             chrEntity = World.GetExistingManager<StormiumGameManager>().SpawnLocal(modelIdent);
 
-            EntityManager.AddComponent(chrEntity, typeof(SimulateEntity));
+            EntityManager.AddComponent(chrEntity, typeof(EntityAuthority));
             EntityManager.SetComponentData(chrEntity, new ProKitBehaviorSettings
             {
                 GroundSettings = SrtGroundSettings.NewBase(),
                 AerialSettings = SrtAerialSettings.NewBase()
             });
+
+            var camera = EntityManager.CreateEntity(typeof(LocalCameraState));
+            
+            EntityManager.SetComponentData(camera, new LocalCameraState{Target = chrEntity, Mode = CameraMode.Forced});
         }
 
         protected override void OnUpdate()
@@ -49,14 +53,14 @@ namespace Stormium.Default.Tests
             mv.x = Input.GetAxisRaw("Horizontal");
             mv.y = Input.GetAxisRaw("Vertical");
             
-            var input = new ProKitInputState(mv, Input.GetKeyDown(KeyCode.Space), Input.GetKeyDown(KeyCode.LeftShift));
+            var input = new ProKitInputState(mv, Input.GetKey(KeyCode.Space), Input.GetKey(KeyCode.LeftShift));
 
             userCommand.Look = GetNewAimLook(userCommand.Look);
             
             EntityManager.SetComponentData(chrEntity, input);
             EntityManager.SetComponentData(chrEntity, new AimLookState(userCommand.Look));
 
-            var chrTr = EntityManager.GetComponentObject<Transform>(chrEntity);
+            /*var chrTr = EntityManager.GetComponentObject<Transform>(chrEntity);
             var cm = Camera.main;
 
             if (cm != null)
@@ -64,12 +68,12 @@ namespace Stormium.Default.Tests
                 var cmTr = cm.transform;
                 cmTr.position = chrTr.position + new Vector3(0, 1.6f, 0);
                 cmTr.rotation = Quaternion.Euler(userCommand.Look.y, userCommand.Look.x, 0);
-            }
+            }*/
         }
 
         private float2 GetNewAimLook(float2 previous)
         {
-            var input = new float2(Input.GetAxisRaw("Mouse X"), -Input.GetAxisRaw("Mouse Y")) * 1.5f;
+            var input = new float2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")) * 1.5f;
                     
             var newRotation = previous + input;
             newRotation.x = newRotation.x % 360;

@@ -1,14 +1,19 @@
+using System;
 using System.Collections.Generic;
+using Runtime;
+using Scripts.Actions.ProKitWeapons;
 using StandardAssets.Characters.Physics;
 using Stormium.Core;
 using Stormium.Default.States;
 using StormiumShared.Core.Networking;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Transforms;
 using UnityEngine;
 
 namespace package.stormium.def.Kits.ProKit
 {
+    [UpdateInGroup(typeof(STUpdateOrder.UO_CharacterBehavior))]
     [AlwaysUpdateSystem]
     public partial class ProKitBehaviorSystem : ComponentSystem
     {
@@ -23,7 +28,7 @@ namespace package.stormium.def.Kits.ProKit
                 ComponentType.Create<AimLookState>(),
                 ComponentType.Create<Velocity>(),
                 ComponentType.Create<OpenCharacterController>(),
-                ComponentType.Create<SimulateEntity>()
+                ComponentType.Create<EntityAuthority>()
             );
             
             m_Collisions = new List<CollisionInfo>();
@@ -45,18 +50,19 @@ namespace package.stormium.def.Kits.ProKit
         {
             ForEach((Entity entity, ref ProKitInputState inputState, ref AimLookState aimLook) =>
             {
-                if (!EntityManager.HasComponent<OwnerState>(entity))
+                if (!EntityManager.HasComponent<OwnerToPlayerState>(entity))
                     return;
 
-                var owner = EntityManager.GetComponentData<OwnerState>(entity).Target;
+                var owner = EntityManager.GetComponentData<OwnerToPlayerState>(entity).Target;
                 if (!EntityManager.HasComponent<BasicUserCommand>(owner))
                     return;
 
                 var commands = EntityManager.GetComponentData<BasicUserCommand>(owner);
 
                 inputState.Movement = commands.Move;
+                inputState.QueueJump = Convert.ToByte(commands.Jump);
+                inputState.QueueDodge = Convert.ToByte(commands.Dodge);
                 aimLook.Aim         = commands.Look;
-
             });
         }
 
