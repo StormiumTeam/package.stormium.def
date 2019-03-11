@@ -56,7 +56,7 @@ namespace Stormium.Default.Actions.ProMinigun
 				ComponentType.ReadWrite<OwnerState<LivableDescription>>(),
 				ComponentType.ReadWrite<EntityAuthority>()
 			);
-			m_ProjectileProvider = World.GetExistingManager<ProMinigunProjectileProvider>();
+			m_ProjectileProvider = World.GetOrCreateManager<ProMinigunProjectileProvider>();
 		}
 
 		protected override unsafe void OnActionUpdate()

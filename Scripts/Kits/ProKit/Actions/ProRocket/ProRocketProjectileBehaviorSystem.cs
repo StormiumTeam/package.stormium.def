@@ -32,8 +32,8 @@ namespace Stormium.Default
 				ComponentType.ReadWrite<Velocity>()
 			);
 
-			m_PhysicQueryManager = World.GetExistingManager<PhysicQueryManager>();
-			m_ExplosionEventProvider = World.GetExistingManager<ProProjectileExplosionEventProvider>();
+			m_PhysicQueryManager = World.GetOrCreateManager<PhysicQueryManager>();
+			m_ExplosionEventProvider = World.GetOrCreateManager<ProProjectileExplosionEventProvider>();
 		}
 
 		protected override void OnUpdate()
@@ -102,7 +102,7 @@ namespace Stormium.Default
 							if (velocity.Value.y <= 0f)
 								yBump = 9.5f;
 
-							PostUpdateCommands.AddComponent(delayedEvent, new TargetExplosionEvent
+							PostUpdateCommands.AddComponent(delayedEvent, new TargetBumpEvent
 							{
 								Position  = projPos,
 								Direction = normalizesafe(center - projPos),

@@ -155,9 +155,13 @@ namespace package.stormium.def.Kits.ProKit
 
                 if (canWallBounce)
                 {
+                    Debug.Log("wallbounce!");
+                    
                     m_State = MovementType.RayTrace;
 
                     var collisionFlags = controller.Move(directionFwd * 0.6f) | controller.Move(invDirectionFwd * 0.6f);
+                    
+                    Debug.Log(collisionFlags);
                     if ((collisionFlags & CollisionFlags.Sides) != 0)
                     {
                         Vector3 normal = default;
@@ -172,6 +176,7 @@ namespace package.stormium.def.Kits.ProKit
                             normal = c.Data.normal;
                         }
 
+                        // wall jump
                         if (normal != default && velocity.Value.y >= 2f)
                         {
                             var bounce = normal * 6f;
@@ -183,14 +188,17 @@ namespace package.stormium.def.Kits.ProKit
                             movementState.WallBounceTick = Tick;
                             movementState.AirControl *= 0.5f;
                         }
+                        // wall dodge
                         else if (normal != default && velocity.Value.y < 2f && movementState.AirTime >= 125)
                         {
                             var oldY = velocity.Value.y;
                             var reflected = Vector3.Reflect(directionFwd, normal);
                             var slideNormal = RayUtility.SlideVelocityNoYChange(velocity.Value, normal);
-                            var dirInertia = (RayUtility.SlideVelocityNoYChange(velocity.Value, normal) * 1f) + normal * 5f;
+                            var dirInertia = RayUtility.SlideVelocityNoYChange(directionFwd, normal);
+                            var speed = math.length(velocity.Value.xz);
+                            //var reflectWall = RayUtility.SlideVelocityNoYChange(reflected, normal).normalized * 2.5f;
 
-                            velocity.Value   = dirInertia + reflected * 1.5f + slideNormal;
+                            velocity.Value   = math.normalizesafe(math.lerp(reflected, normal, 0.1f) + (float3)dirInertia) * (speed + 3f);
                             velocity.Value.y = math.max(oldY + 3, 3);
 
                             movementState.WallBounceTick =  Tick;

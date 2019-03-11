@@ -9,10 +9,9 @@ namespace Scripts
 	{
 		protected override void OnUpdate()
 		{
-			var gameMgr = World.GetExistingManager<GameManager>();
 			var tick = Tick;
 
-			if (gameMgr.GameType == GameType.Server)
+			if (GameMgr.GameType == GameType.Server)
 				return;
 			
 			ForEach((DynamicBuffer<InterpolationBuffer> buffer, ref InterpolationData interpolationData, ref TransformState transform) =>

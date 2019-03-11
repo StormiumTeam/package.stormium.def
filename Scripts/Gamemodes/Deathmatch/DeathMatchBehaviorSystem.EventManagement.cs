@@ -29,7 +29,7 @@ namespace Stormium.Default.GameModes
 				EntityManager.SetComponentData(damageEvent.Victim, healthState);
 			});
 			
-			ForEach((ref GameEvent gameEvent, ref TargetExplosionEvent explosionEvent) =>
+			ForEach((ref GameEvent gameEvent, ref TargetBumpEvent explosionEvent) =>
 			{
 				if (!EntityManager.HasComponent<Velocity>(explosionEvent.Victim))
 					return;

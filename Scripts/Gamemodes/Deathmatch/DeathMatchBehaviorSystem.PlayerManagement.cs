@@ -20,7 +20,7 @@ namespace Stormium.Default.GameModes
                 ComponentType.Exclude<DeathMatchPlayer>()
             );
 
-            DmPlayerModelId = World.GetExistingManager<EntityModelManager>().Register("dm.player.model", SpawnDmPlayer, DestroyDmPlayer);
+            DmPlayerModelId = World.GetOrCreateManager<EntityModelManager>().Register("dm.player.model", SpawnDmPlayer, DestroyDmPlayer);
         }
 
         public void ManageClients()

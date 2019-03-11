@@ -20,7 +20,7 @@ namespace Scripts.Provider
 			public DataBufferWriter Buffer;
 
 			[ReadOnly]
-			public ComponentDataFromEntity<TargetExplosionEvent> ExplosionEventFromEntity;
+			public ComponentDataFromEntity<TargetBumpEvent> ExplosionEventFromEntity;
 			[ReadOnly]
 			public ComponentDataFromEntity<TargetDamageEvent> DamageEventFromEntity;
 			
@@ -28,31 +28,23 @@ namespace Scripts.Provider
 			{
 				for (var i = 0; i != Runtime.Entities.Length; i++)
 				{
-					var entity = Runtime.Entities[i];
-					if (entity.ModelId != ModelId)
+					var (source, modelId) = Runtime.Entities[i];
+					if (modelId != ModelId)
 						continue;
 
 					byte mask       = 0;
 					var  maskMarker = Buffer.WriteByte(0);
 
-					if (ExplosionEventFromEntity.Exists(entity.Source))
+					if (ExplosionEventFromEntity.Exists(source))
 					{
 						MainBit.SetBitAt(ref mask, 0, 1);
-						var explosionData = ExplosionEventFromEntity[entity.Source];
-
-						Buffer.WriteValue(explosionData.Position);
-						Buffer.WriteValue((half3) explosionData.Direction);
-						Buffer.WriteValue((half3) explosionData.Force);
-
-						Buffer.WriteDynamicIntWithMask((ulong) Runtime.GetIndex(explosionData.Victim), (ulong) Runtime.GetIndex(explosionData.Shooter));
+						ExplosionEventFromEntity[source].Write(ref Buffer, default, Runtime);
 					}
 
-					if (DamageEventFromEntity.Exists(entity.Source))
+					if (DamageEventFromEntity.Exists(source))
 					{
 						MainBit.SetBitAt(ref mask, 1, 1);
-						var damageData = DamageEventFromEntity[entity.Source];
-
-						Buffer.WriteDynamicIntWithMask((ulong) damageData.DmgValue, (ulong) Runtime.GetIndex(damageData.Victim), (ulong) Runtime.GetIndex(damageData.Shooter));
+						DamageEventFromEntity[source].Write(ref Buffer, default, Runtime);
 					}
 
 					Buffer.WriteByte(mask, maskMarker);
@@ -69,7 +61,7 @@ namespace Scripts.Provider
 
 			public NativeArray<int> CurrReadDataCursor;
 
-			public ComponentDataFromEntity<TargetExplosionEvent> ExplosionEventFromEntity;
+			public ComponentDataFromEntity<TargetBumpEvent> ExplosionEventFromEntity;
 			public ComponentDataFromEntity<TargetDamageEvent> DamageEventFromEntity;
 
 			public EntityCommandBuffer Ecb;
@@ -88,46 +80,27 @@ namespace Scripts.Provider
 					// TargetExplosionEvent
 					if (MainBit.GetBitAt(mask, 0) == 1)
 					{
-						var position  = Buffer.ReadValue<float3>();
-						var direction = Buffer.ReadValue<half3>();
-						var force     = Buffer.ReadValue<half3>();
-
-						Buffer.ReadDynIntegerFromMask(out var unsignedVictimIdx, out var unsignedShooterIdx);
-
-						var victim  = Runtime.GetWorldEntityFromGlobal((int) unsignedVictimIdx);
-						var shooter = Runtime.GetWorldEntityFromGlobal((int) unsignedShooterIdx);
+						var bumpEvent = new TargetBumpEvent();
 						
-						var targetExplosionEvent =  new TargetExplosionEvent
-						{
-							Position = position, Direction = direction, Force = force,
-							Victim   = victim, Shooter     = shooter
-						};
+						bumpEvent.Read(ref Buffer, Runtime.Header.Sender, Runtime);
 						
 						if (ExplosionEventFromEntity.Exists(worldEntity))
-							ExplosionEventFromEntity[worldEntity] = targetExplosionEvent;
+							ExplosionEventFromEntity[worldEntity] = bumpEvent;
 						else
-							Ecb.AddComponent(worldEntity, targetExplosionEvent);
+							Ecb.AddComponent(worldEntity, bumpEvent);
 					}
 
 					// TargetDamageEvent
 					if (MainBit.GetBitAt(mask, 1) == 1)
 					{
-						Buffer.ReadDynIntegerFromMask(out var unsignedDmgValue, out var unsignedVictimIdx, out var unsignedShooterIdx);
-
-						var dmgValue = (int) unsignedDmgValue;
-						var victim   = Runtime.GetWorldEntityFromGlobal((int) unsignedVictimIdx);
-						var shooter  = Runtime.GetWorldEntityFromGlobal((int) unsignedShooterIdx);
-
-						var targetDamageEvent = new TargetDamageEvent
-						{
-							DmgValue = dmgValue,
-							Victim   = victim, Shooter = shooter
-						};
-
+						var damageEvent = new TargetDamageEvent();
+						
+						damageEvent.Read(ref Buffer, Runtime.Header.Sender, Runtime);
+						
 						if (DamageEventFromEntity.Exists(worldEntity))
-							DamageEventFromEntity[worldEntity] = targetDamageEvent;
+							DamageEventFromEntity[worldEntity] = damageEvent;
 						else
-							Ecb.AddComponent(worldEntity, targetDamageEvent);
+							Ecb.AddComponent(worldEntity, damageEvent);
 					}
 				}
 
@@ -140,7 +113,7 @@ namespace Scripts.Provider
 			entityComponents = new ComponentType[]
 			{
 				typeof(GameEvent),
-				typeof(TargetExplosionEvent),
+				typeof(TargetBumpEvent),
 				typeof(TargetDamageEvent),
 				typeof(ExcludeFromDataStreamer)
 			};
@@ -170,7 +143,7 @@ namespace Scripts.Provider
 				ModelId = GetModelIdent().Id,
 				Buffer = data,
 				Runtime = snapshotRuntime,
-				ExplosionEventFromEntity = GetComponentDataFromEntity<TargetExplosionEvent>(),
+				ExplosionEventFromEntity = GetComponentDataFromEntity<TargetBumpEvent>(),
 				DamageEventFromEntity = GetComponentDataFromEntity<TargetDamageEvent>(),
 			}.Run();
 		}
@@ -185,7 +158,7 @@ namespace Scripts.Provider
 					ModelId                  = GetModelIdent().Id,
 					Buffer                   = data,
 					Runtime                  = snapshotRuntime,
-					ExplosionEventFromEntity = GetComponentDataFromEntity<TargetExplosionEvent>(),
+					ExplosionEventFromEntity = GetComponentDataFromEntity<TargetBumpEvent>(),
 					DamageEventFromEntity    = GetComponentDataFromEntity<TargetDamageEvent>(),
 					
 					CurrReadDataCursor = readCursor,

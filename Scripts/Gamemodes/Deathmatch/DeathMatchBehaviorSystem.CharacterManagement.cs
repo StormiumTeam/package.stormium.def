@@ -32,7 +32,7 @@ namespace Stormium.Default.GameModes
                 ComponentType.ReadWrite<DeathMatchSpawn>()
             );
 
-            CharacterModel = World.GetExistingManager<TestCharacterProvider>().GetModelIdent();
+            CharacterModel = World.GetOrCreateManager<TestCharacterProvider>().GetModelIdent();
         }
 
         public void CreateCharacters()

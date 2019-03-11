@@ -1,3 +1,4 @@
+using System;
 using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -5,10 +6,11 @@ using UnityEngine;
 
 namespace Scripts.Bumpers
 {
+	[Serializable]
 	public struct LaunchPad : IComponentData
 	{
-		public float3 Direction;
-		public float Force;
+		public float3 direction;
+		public float force;
 	}
 
 	public class LaunchPadSystem : GameBaseSystem
@@ -31,8 +33,10 @@ namespace Scripts.Bumpers
 				var collider = transform.GetComponent<Collider>();
 
 				s_ForEachData.PadCollider = collider;
+				s_ForEachData.PadPosition = transform.position;
+				s_ForEachData.PadRotation = transform.rotation;
 
-				ForEach((Entity otherEntity, Transform otherTransform) =>
+				Entities.WithAll<Transform, LivableDescription>().ForEach((Entity otherEntity, Transform otherTransform) =>
 				{
 					if (!otherTransform.GetComponent<Collider>())
 						return;
@@ -42,8 +46,9 @@ namespace Scripts.Bumpers
 						otherCollider, otherTransform.position, otherTransform.rotation,
 						out _, out _))
 						return;
-					
+
 					// Create Bump event
+					Debug.Log("Bump!");
 				});
 			});
 		}

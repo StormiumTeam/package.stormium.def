@@ -23,7 +23,7 @@ namespace GUIScripts
 
 			SetSpectatorRequestId = AddMessage(OnSetSpectatorRequest);
 			
-			World.GetExistingManager<AppEventSystem>().SubscribeToAll(this);
+			World.GetOrCreateManager<AppEventSystem>().SubscribeToAll(this);
 		}
 
 		private void OnSetSpectatorRequest(NetworkInstanceData networkInstance, Entity client, DataBufferReader data)

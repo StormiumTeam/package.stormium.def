@@ -29,8 +29,8 @@ namespace Scripts.Actions.ProRailgun
 		{
 			base.OnCreateManager();
 
-			m_PhysicQueryManager     = World.GetExistingManager<PhysicQueryManager>();
-			m_ExplosionEventProvider = World.GetExistingManager<ProProjectileExplosionEventProvider>();
+			m_PhysicQueryManager     = World.GetOrCreateManager<PhysicQueryManager>();
+			m_ExplosionEventProvider = World.GetOrCreateManager<ProProjectileExplosionEventProvider>();
 		}
 
 		protected override void OnUpdate()
@@ -66,7 +66,7 @@ namespace Scripts.Actions.ProRailgun
 						
 						Debug.Log("Railgun Hit: " + hitGameObjectEntity.Entity);
 
-						PostUpdateCommands.AddComponent(delayedEvent, new TargetExplosionEvent
+						PostUpdateCommands.AddComponent(delayedEvent, new TargetBumpEvent
 						{
 							Direction = ray.direction,
 							Force     = float3(1, 1, 1),

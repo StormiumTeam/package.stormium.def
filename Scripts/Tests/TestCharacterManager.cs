@@ -18,9 +18,9 @@ namespace Stormium.Default.Tests
 
         protected override void OnStartRunning()
         {
-            var modelIdent = World.GetExistingManager<TestCharacterProvider>().GetModelIdent();
+            var modelIdent = World.GetOrCreateManager<TestCharacterProvider>().GetModelIdent();
             
-            chrEntity = World.GetExistingManager<GameManager>().SpawnLocal(modelIdent);
+            chrEntity = World.GetOrCreateManager<GameManager>().SpawnLocal(modelIdent);
 
             EntityManager.AddComponent(chrEntity, typeof(EntityAuthority));
             EntityManager.SetComponentData(chrEntity, new ProKitMovementSettings

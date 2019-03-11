@@ -34,7 +34,7 @@ namespace package.stormium.def.Kits.ProKit
             );
 
             m_Collisions = new List<CollisionInfo>();
-            m_QueryManager = World.GetExistingManager<PhysicQueryManager>();
+            m_QueryManager = World.GetOrCreateManager<PhysicQueryManager>();
         }
 
         protected override void OnUpdate()

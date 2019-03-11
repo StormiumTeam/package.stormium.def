@@ -22,7 +22,7 @@ namespace Stormium.Default.GameModes
         {
             base.OnCreateManager();
             
-            m_SnapshotPattern = World.GetExistingManager<NetPatternSystem>()
+            m_SnapshotPattern = World.GetOrCreateManager<NetPatternSystem>()
                                      .GetLocalBank()
                                      .Register($"000{nameof(DeathMatchBehaviorSystem)}.Snapshot");
             
