@@ -5,6 +5,7 @@
         "Unity.ResourceManager",
         "Unity.RenderPipelines.HighDefinition.Runtime",
         "package.guerro.shared",
+        "package.stormiumteam.gamebase",
         "package.stormium.core",
         "package.stormiumteam.networking",
         "package.stormiumteam.inputs",
@@ -16,6 +17,7 @@
         "Unity.Mathematics",
         "Unity.Collections",
         "Unity.Jobs",
+        "Unity.TextMeshPro",
         "Unity.Burst"
     ],
     "optionalUnityReferences": [],

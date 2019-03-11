@@ -1,19 +1,3 @@
-using System;
-using System.Threading;
-using package.stormiumteam.networking;
-using package.stormiumteam.networking.runtime.highlevel;
-using package.stormiumteam.networking.runtime.lowlevel;
-using package.stormiumteam.shared;
-using Stormium.Core;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.Entities;
-using Unity.Mathematics;
-using UnityEngine;
-using UnityEngine.Experimental.PlayerLoop;
-using UnityEngine.Profiling;
-using Random = UnityEngine.Random;
-
 namespace Stormium.Default.Tests
 {
     /*[UpdateBefore(typeof(UpdateLoop.BeforeDataChange))]

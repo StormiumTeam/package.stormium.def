@@ -1,6 +1,6 @@
-using Runtime.Data;
-using Stormium.Core;
 using Stormium.Default.States;
+using StormiumShared.Core;
+using StormiumTeam.GameBase.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -17,7 +17,7 @@ namespace Scripts
 
         protected override void OnUpdate()
         {
-            m_Delta = World.GetExistingManager<StGameTimeManager>().GetTimeFromSingleton().DeltaTime;
+            m_Delta = GetSingleton<GameTimeComponent>().Value.DeltaTime;
 
             var nMove = math.normalizesafe(new float2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")));
 
@@ -35,23 +35,23 @@ namespace Scripts
 
             m_Look = GetNewAimLook(m_Look);
 
-            ForEach((Entity entity, ref LocalCameraFreeMove freeMove, ref Position position, ref Rotation rotation) =>
+            ForEach((Entity entity, ref LocalCameraFreeMove freeMove, ref Translation translation, ref Rotation rotation) =>
             {
                 var horizontal = m_Move.x * freeMove.Intensity * m_Delta;
                 var vertical   = m_Move.y * freeMove.Intensity * m_Delta;
                 var look       = m_Look;
 
                 rotation.Value =  Quaternion.Euler(-look.y, look.x, 0.0f);
-                position.Value += math.mul(rotation.Value, new Vector3(horizontal, 0, vertical));
+                translation.Value += math.mul(rotation.Value, new Vector3(horizontal, 0, vertical));
 
-                position.Value.y += m_Jet * (freeMove.Intensity * 0.75f) * m_Delta;
+                translation.Value.y += m_Jet * (freeMove.Intensity * 0.75f) * m_Delta;
 
                 if (EntityManager.HasComponent<CameraModifierData>(entity))
                 {
                     EntityManager.SetComponentData(entity, new CameraModifierData
                     {
                         FieldOfView = 60.0f,
-                        Position    = position.Value,
+                        Position    = translation.Value,
                         Rotation    = rotation.Value
                     });
                 }

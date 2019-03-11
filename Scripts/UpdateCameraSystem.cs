@@ -1,18 +1,17 @@
-using package.stormiumteam.shared;
-using Runtime.Components;
-using Runtime.Data;
 using Stormium.Core;
 using Stormium.Default.States;
+using StormiumTeam.GameBase;
+using StormiumTeam.GameBase.Components;
+using StormiumTeam.GameBase.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
-using UnityEngine.Experimental.PlayerLoop;
 using UnityEngine.Profiling;
 
 namespace Stormium.Default
 {
-    [UpdateAfter(typeof(PreLateUpdate))]
+    [UpdateInGroup(typeof(STUpdateOrder.UO_FinalizeData))]
     public class UpdateCameraSystem : ComponentSystem
     {
         struct DataToSet
@@ -36,7 +35,7 @@ namespace Stormium.Default
             var camStateEntity = EntityManager.CreateEntity(typeof(LocalCameraState));
 
             // Create a default free move camera
-            var freeMoveEntity = EntityManager.CreateEntity(typeof(LocalCameraFreeMove), typeof(CameraModifierData), typeof(Position), typeof(Rotation));
+            var freeMoveEntity = EntityManager.CreateEntity(typeof(LocalCameraFreeMove), typeof(CameraModifierData), typeof(Translation), typeof(Rotation), typeof(LocalToWorld));
 
             EntityManager.SetComponentData(camStateEntity, new LocalCameraState {Target = freeMoveEntity});
             EntityManager.SetComponentData(freeMoveEntity, new LocalCameraFreeMove{Intensity = 8f});
@@ -85,7 +84,7 @@ namespace Stormium.Default
             Profiler.EndSample();
 
             Profiler.BeginSample("ForEach3");
-            ForEach((ref StGamePlayer player, ref ServerCameraState cameraState) =>
+            ForEach((ref GamePlayer player, ref ServerCameraState cameraState) =>
             {
                 if (player.IsSelf == 0)
                     return;
@@ -123,7 +122,7 @@ namespace Stormium.Default
             var modifier = EntityManager.GetComponentData<CameraModifierData>(dataToSet.Target);
             var tr       = camera.transform;
 
-            //camera.fieldOfView = modifier.FieldOfView;
+            camera.fieldOfView = math.max(modifier.FieldOfView, 30);
 
             tr.position = modifier.Position + dataToSet.PosOffset;
             tr.rotation = math.mul(modifier.Rotation, dataToSet.RotOffset);

@@ -1,18 +1,16 @@
-using Runtime;
-using Stormium.Core;
-using Stormium.Default.States;
-using Unity.Collections;
+using StormiumShared.Core;
+using StormiumTeam.GameBase;
 using Unity.Entities;
 using UnityEngine;
 
 namespace Scripts
 {
-	public class InterpolateTransformSystem : ComponentSystem
+	public class InterpolateTransformSystem : GameBaseSystem
 	{
 		protected override void OnUpdate()
 		{
-			var gameMgr = World.GetExistingManager<StormiumGameManager>();
-			var tick = World.GetExistingManager<StGameTimeManager>().GetTimeFromSingleton().Tick;
+			var gameMgr = World.GetExistingManager<GameManager>();
+			var tick = Tick;
 
 			if (gameMgr.GameType == GameType.Server)
 				return;

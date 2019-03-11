@@ -1,11 +1,8 @@
 using package.stormium.def;
 using package.stormium.def.Kits.ProKit;
-using package.stormiumteam.networking;
-using Runtime;
-using StandardAssets.Characters.Physics;
 using Stormium.Core;
 using Stormium.Default.States;
-using StormiumShared.Core.Networking;
+using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -23,10 +20,10 @@ namespace Stormium.Default.Tests
         {
             var modelIdent = World.GetExistingManager<TestCharacterProvider>().GetModelIdent();
             
-            chrEntity = World.GetExistingManager<StormiumGameManager>().SpawnLocal(modelIdent);
+            chrEntity = World.GetExistingManager<GameManager>().SpawnLocal(modelIdent);
 
             EntityManager.AddComponent(chrEntity, typeof(EntityAuthority));
-            EntityManager.SetComponentData(chrEntity, new ProKitBehaviorSettings
+            EntityManager.SetComponentData(chrEntity, new ProKitMovementSettings
             {
                 GroundSettings = SrtGroundSettings.NewBase(),
                 AerialSettings = SrtAerialSettings.NewBase()

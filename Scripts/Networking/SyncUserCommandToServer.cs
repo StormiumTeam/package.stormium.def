@@ -1,15 +1,14 @@
-using Runtime;
-using Unity.Entities;
+using StormiumTeam.GameBase;
 
 namespace Scripts.Networking
 {
-    public class SyncUserCommandToServer : ComponentSystem
+    public class SyncUserCommandToServer : BaseComponentSystem
     {
-        private StormiumGameManager m_GameManager;
+        private GameManager m_GameManager;
 
         protected override void OnCreateManager()
         {
-            m_GameManager = World.GetOrCreateManager<StormiumGameManager>();
+            m_GameManager = World.GetExistingManager<GameManager>();
         }
 
         protected override void OnUpdate()

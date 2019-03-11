@@ -1,26 +1,20 @@
-using System;
 using System.Net;
 using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.shared;
-using Runtime;
-using Stormium.Core;
 using Stormium.Default.GameModes;
-using Stormium.Default.States;
-using StormiumShared.Core.Networking;
-using Unity.Burst;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
+using StormiumShared.Core;
+using StormiumTeam.GameBase;
 using Unity.Entities;
-using Unity.Transforms;
+using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Rendering;
+using Bootstrap = package.stormium.def.Bootstrap;
 
 namespace Stormium.Default.Tests 
 {
     //[DisableAutoCreation]
     public class TestDmMultiPlayer : ComponentSystem, INativeEventOnGUI
     {
-        public StormiumGameServerManager ServerMgr;
+        public GameServerManager ServerMgr;
         public AppEventSystem AppEventSystem;
         public Entity         GameModeEntity;
         
@@ -30,12 +24,29 @@ namespace Stormium.Default.Tests
 
         protected override void OnCreateManager()
         {
-            ServerMgr = World.GetOrCreateManager<StormiumGameServerManager>();
+            ServerMgr = World.GetOrCreateManager<GameServerManager>();
             AppEventSystem = World.GetOrCreateManager<AppEventSystem>(); 
 
             AppEventSystem.SubscribeToAll(this);
              
             Application.targetFrameRate = 150;
+            
+            World.GetOrCreateManager<GameManager>().SetGameAs(GameType.Client);
+
+            Bootstrap.register();
+
+            var test = new quaternion(0.402183f, 0.5150455f, 0.6595801f, 0.3713907f);
+            var euler = math.mul(test, new float3(1));
+            
+            Debug.Log("test 0= " +  euler);
+            
+            test = quaternion.Euler(euler);
+            
+            Debug.Log("test 1= " +  test);
+
+            euler = math.mul(test, new float3(1));
+            
+            Debug.Log("test 2= " +  test);
         }
 
         protected override unsafe void OnUpdate()
@@ -55,7 +66,7 @@ namespace Stormium.Default.Tests
 
         public void NativeOnGUI()
         {
-            var gameTime = World.GetExistingManager<StGameTimeManager>().GetTimeFromSingleton();
+            var gameTime = GetSingleton<GameTimeComponent>().Value;
             
             using (new GUILayout.VerticalScope())
             {
@@ -97,20 +108,24 @@ namespace Stormium.Default.Tests
                 var targetEp = new IPEndPoint(IPAddress.Parse(HostAddr), HostPort);
                 if (!ServerMgr.ConnectToServer(targetEp))
                     Debug.LogError("Couldn't connect to a server. endpoint=" + targetEp);
+                
+                World.GetExistingManager<GameManager>().SetGameAs(GameType.Client);
             }
 
             if (GUILayout.Button("Create"))
             {
-                Application.targetFrameRate = 100;
+                Application.targetFrameRate = 82;
 
                 if (!ServerMgr.LaunchServer(HostPort))
                     Debug.LogError("Couldn't launch a server. port=" + HostPort);
 
                 GameModeEntity = EntityManager.CreateEntity
                 (
-                    ComponentType.Create<DeathMatchData>(),
-                    ComponentType.Create<EntityAuthority>()
+                    ComponentType.ReadWrite<DeathMatchData>(),
+                    ComponentType.ReadWrite<EntityAuthority>()
                 );
+                
+                World.GetExistingManager<GameManager>().SetGameAs(GameType.Client | GameType.Server);
 
 #if UNITY_EDITOR
                 EntityManager.SetName(GameModeEntity, "DeathMatch GameMode");

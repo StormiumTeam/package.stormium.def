@@ -6,12 +6,16 @@ namespace package.stormium.def
     {
         protected override void OnRegister()
         {
-
         }
 
         protected override void OnUnregister()
         {
 
+        }
+
+        public static void register()
+        {
+            new Bootstrap().OnRegister();
         }
     }
 }

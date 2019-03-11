@@ -1,5 +1,5 @@
-using System;
 using Stormium.Core;
+using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -17,7 +17,7 @@ namespace Stormium.Default.States
             {
                 if (hasCopyToGameObject)
                 {
-                    position = EntityManager.GetComponentData<Position>(entity).Value;
+                    position = EntityManager.GetComponentData<Translation>(entity).Value;
                     rotation = EntityManager.GetComponentData<Rotation>(entity).Value;
 
                     return;
@@ -31,7 +31,7 @@ namespace Stormium.Default.States
                 return;
             }
 
-            position = EntityManager.GetComponentData<Position>(entity).Value;
+            position = EntityManager.GetComponentData<Translation>(entity).Value;
             rotation = EntityManager.GetComponentData<Rotation>(entity).Value;
         }
 
@@ -43,7 +43,7 @@ namespace Stormium.Default.States
             {
                 if (hasCopyToGameObject)
                 {
-                    EntityManager.SetComponentData(entity, new Position {Value = position});
+                    EntityManager.SetComponentData(entity, new Translation {Value = position});
                     EntityManager.SetComponentData(entity, new Rotation {Value = rotation});
 
                     return;
@@ -58,7 +58,7 @@ namespace Stormium.Default.States
                 return;
             }
 
-            EntityManager.SetComponentData(entity, new Position {Value = position});
+            EntityManager.SetComponentData(entity, new Translation {Value = position});
             EntityManager.SetComponentData(entity, new Rotation {Value = rotation});
         }
     }

@@ -1,7 +1,3 @@
-using package.stormiumteam.shared;
-using Unity.Mathematics;
-using UnityEngine;
-
 namespace package.stormium.def
 {
     public struct SrtGroundSettings
@@ -63,11 +59,11 @@ namespace package.stormium.def
                 FrictionMin = 0.25f,
                 FrictionMax = 1f,
 
-                SurfaceFriction = 60f,
-                DecayBaseSpeedFriction = 10f,
+                SurfaceFriction = 50f,
+                DecayBaseSpeedFriction = 8.5f,
 
                 Acceleration   = 75f,
-                Deacceleration = 20f,
+                Deacceleration = 17.5f,
                 BaseSpeed      = 8f,
                 SprintSpeed    = 12f,
             };

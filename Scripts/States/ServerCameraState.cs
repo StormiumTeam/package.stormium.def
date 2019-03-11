@@ -1,35 +1,29 @@
 using package.stormiumteam.networking.runtime.lowlevel;
-using Stormium.Core;
 using StormiumShared.Core.Networking;
-using Unity.Collections;
+using StormiumTeam.GameBase;
 using Unity.Entities;
-using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace Stormium.Default.States
 {
     public struct ServerCameraState : IStateData, IComponentData
     {
-        public struct WritePayload : IWriteEntityDataPayload
+        public struct WritePayload : IWriteEntityDataPayload<ServerCameraState>
         {
-            public ComponentDataFromEntity<ServerCameraState> States;
-            
-            public void Write(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
+            public void Write(int index, Entity entity, ComponentDataFromEntity<ServerCameraState> stateFromEntity, ComponentDataFromEntity<DataChanged<ServerCameraState>> changeFromEntity, DataBufferWriter data, SnapshotReceiver receiver, SnapshotRuntime runtime)
             {
-                var state = States[entity];
+                var state = stateFromEntity[entity];
             
                 data.WriteRef(ref state.Mode);
                 data.WriteRef(ref state.Target);
-                data.WriteValue((half3) state.PosOffset);
-                data.WriteValue((half4) state.RotOffset.value);
+                data.WriteUnmanaged((half3) state.PosOffset);
+                data.WriteUnmanaged((half4) state.RotOffset.value);
             }
         }
 
-        public struct ReadPayload : IReadEntityDataPayload
+        public struct ReadPayload : IReadEntityDataPayload<ServerCameraState>
         {
-            public EntityManager EntityManager;
-            
-            public void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
+            public void Read(int index, Entity entity, ComponentDataFromEntity<ServerCameraState> dataFromEntity, ref DataBufferReader data, SnapshotSender sender, SnapshotRuntime runtime)
             {
                 ServerCameraState state = default;
 
@@ -38,7 +32,7 @@ namespace Stormium.Default.States
                 state.PosOffset = data.ReadValue<half3>();
                 state.RotOffset = (float4) data.ReadValue<half4>();
 
-                EntityManager.SetComponentData(entity, state);
+                dataFromEntity[entity] = state;
             }
         }
         
@@ -46,12 +40,10 @@ namespace Stormium.Default.States
         {
             protected override void UpdatePayloadW(ref WritePayload current)
             {
-                current.States = States;
             }
 
             protected override void UpdatePayloadR(ref ReadPayload current)
             {
-                current.EntityManager = EntityManager;
             }
         }
         

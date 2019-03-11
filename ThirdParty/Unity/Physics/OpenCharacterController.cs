@@ -416,7 +416,7 @@ namespace StandardAssets.Characters.Physics
 		float m_SlideGravityScale = 1.0f;
 
 		[SerializeField, Tooltip("The time (in seconds) after initiating a slide classified as a slide start. Used to disable jumping.")]
-		float m_SlideStartTime = 0.25f;
+		float m_SlideStartTime = 0.0f;
 
 		// Max slope limit.
 		const float k_MaxSlopeLimit = 90.0f;
@@ -555,7 +555,7 @@ namespace StandardAssets.Characters.Physics
 		/// <summary>
 		/// Is the character sliding and has been sliding less than slideDownTimeUntilJumAllowed
 		/// </summary>
-		public bool startedSlide { get { return isSlidingDownSlope && m_SlidingDownSlopeTime <= m_SlideStartTime; } }
+		public bool startedSlide { get { return isSlidingDownSlope && m_SlidingDownSlopeTime >= m_SlideStartTime; } }
 
 		/// <summary>
 		/// The capsule radius with the relevant scaling applied (e.g. if object scale is not 1,1,1)
@@ -1051,6 +1051,11 @@ namespace StandardAssets.Characters.Physics
 		public LayerMask GetCollisionLayerMask()
 		{
 			return m_CollisionLayerMask;
+		}
+		
+		public void SetLayerMask(LayerMask layerMask)
+		{
+			m_CollisionLayerMask = layerMask;
 		}
 
 		/// <summary>

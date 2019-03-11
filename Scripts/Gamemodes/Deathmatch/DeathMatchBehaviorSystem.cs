@@ -2,10 +2,9 @@ using package.stormiumteam.networking;
 using package.stormiumteam.networking.runtime.lowlevel;
 using Stormium.Core;
 using StormiumShared.Core.Networking;
+using StormiumTeam.GameBase;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Jobs;
-using UnityEngine.AddressableAssets;
 
 namespace Stormium.Default.GameModes
 {
@@ -23,20 +22,17 @@ namespace Stormium.Default.GameModes
         {
             base.OnCreateManager();
             
-            m_SnapshotPattern = World.GetOrCreateManager<NetPatternSystem>()
+            m_SnapshotPattern = World.GetExistingManager<NetPatternSystem>()
                                      .GetLocalBank()
                                      .Register($"000{nameof(DeathMatchBehaviorSystem)}.Snapshot");
-        }
-
-        protected override void OnStartRunning()
-        {
+            
             Init_PlayerManagement();
             Init_CharacterManagement();
 
             m_SimulatedGameModes = GetComponentGroup
             (
-                ComponentType.Create<DeathMatchData>(),
-                ComponentType.Create<EntityAuthority>()
+                ComponentType.ReadWrite<DeathMatchData>(),
+                ComponentType.ReadWrite<EntityAuthority>()
             );
         }
 
@@ -54,6 +50,9 @@ namespace Stormium.Default.GameModes
                 ManageClients();
                 CreateCharacters();
                 DestroyCharacters();
+
+                ManageCharacters();
+                ManageEvents();
                 
                 // Force client's cameras to be on their characters.
                 ForceCharacterCamera();
@@ -78,7 +77,7 @@ namespace Stormium.Default.GameModes
         {
         }
 
-        public DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime)
+        public DataBufferWriter WriteData(SnapshotReceiver receiver, SnapshotRuntime runtime)
         {
             var buffer = new DataBufferWriter(0, Allocator.Temp);
 
@@ -91,7 +90,7 @@ namespace Stormium.Default.GameModes
             return buffer;
         }
 
-        public void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData)
+        public void ReadData(SnapshotSender sender, SnapshotRuntime runtime, DataBufferReader sysData)
         {
         }
     }
