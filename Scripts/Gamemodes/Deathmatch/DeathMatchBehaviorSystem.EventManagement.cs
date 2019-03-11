@@ -2,6 +2,7 @@ using package.stormium.def.Kits.ProKit;
 using Stormium.Default.States;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace Stormium.Default.GameModes
@@ -35,6 +36,8 @@ namespace Stormium.Default.GameModes
 					return;
 
 				var velocity = EntityManager.GetComponentData<Velocity>(explosionEvent.Victim);
+
+				velocity.Value *= math.clamp(explosionEvent.VelocityReset, 0, 1);
 				velocity.Value += explosionEvent.Direction * explosionEvent.Force;
 				
 				EntityManager.SetComponentData(explosionEvent.Victim, velocity);

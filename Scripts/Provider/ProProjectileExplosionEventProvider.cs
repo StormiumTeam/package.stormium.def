@@ -59,7 +59,7 @@ namespace Scripts.Provider
 			public SnapshotRuntime Runtime;
 			public DataBufferReader  Buffer;
 
-			public NativeArray<int> CurrReadDataCursor;
+			public UnsafeAllocation<int> BufferCursor;
 
 			public ComponentDataFromEntity<TargetBumpEvent> ExplosionEventFromEntity;
 			public ComponentDataFromEntity<TargetDamageEvent> DamageEventFromEntity;
@@ -104,7 +104,7 @@ namespace Scripts.Provider
 					}
 				}
 
-				CurrReadDataCursor[0] = Buffer.CurrReadIndex;
+				BufferCursor.Value = Buffer.CurrReadIndex;
 			}
 		}
 
@@ -151,7 +151,7 @@ namespace Scripts.Provider
 		public override void DeserializeCollection(ref DataBufferReader data, SnapshotSender sender, SnapshotRuntime snapshotRuntime)
 		{
 			using (var tempEcb = new EntityCommandBuffer(Allocator.TempJob))
-			using (var readCursor = new NativeArray<int>(1, Allocator.TempJob) {[0] = data.CurrReadIndex})
+			using (var readCursor = new UnsafeAllocation<int>(Allocator.TempJob, 1))
 			{
 				new DeserializeCollectionJob
 				{
@@ -161,11 +161,11 @@ namespace Scripts.Provider
 					ExplosionEventFromEntity = GetComponentDataFromEntity<TargetBumpEvent>(),
 					DamageEventFromEntity    = GetComponentDataFromEntity<TargetDamageEvent>(),
 					
-					CurrReadDataCursor = readCursor,
+					BufferCursor = readCursor,
 					Ecb = tempEcb
 				}.Run();
 
-				data.CurrReadIndex = readCursor[0];
+				data.CurrReadIndex = readCursor.Value;
 				tempEcb.Playback(EntityManager);
 			}
 		}

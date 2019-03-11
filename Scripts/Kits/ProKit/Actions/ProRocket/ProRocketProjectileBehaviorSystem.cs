@@ -105,6 +105,7 @@ namespace Stormium.Default
 							PostUpdateCommands.AddComponent(delayedEvent, new TargetBumpEvent
 							{
 								Position  = projPos,
+								VelocityReset = float3(1, 1, 1),
 								Direction = normalizesafe(center - projPos),
 								Force     = new float3(12, yBump, 12),
 

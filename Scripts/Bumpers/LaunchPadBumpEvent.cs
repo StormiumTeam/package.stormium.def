@@ -144,6 +144,13 @@ namespace Scripts.Bumpers
 		{
 			return EntityManager.CreateEntity(EntityComponents);
 		}
+		
+		public override Entity SpawnLocalEntityDelayed(EntityCommandBuffer entityCommandBuffer)
+		{
+			var e = entityCommandBuffer.CreateEntity(EntityArchetype);
+			entityCommandBuffer.SetComponent(e, GetModelIdent());
+			return e;
+		}
 
 		protected override void DestroyEntity(Entity worldEntity)
 		{

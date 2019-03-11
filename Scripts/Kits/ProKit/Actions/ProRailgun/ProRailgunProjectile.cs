@@ -70,6 +70,7 @@ namespace Scripts.Actions.ProRailgun
 						{
 							Direction = ray.direction,
 							Force     = float3(1, 1, 1),
+							VelocityReset = float3(1, 1, 1),
 
 							Position = railgun.HitPoint,
 							Shooter  = entity,
