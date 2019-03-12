@@ -47,6 +47,14 @@ namespace Stormium.Default.Tests
             euler = math.mul(test, new float3(1));
             
             Debug.Log("test 2= " +  test);
+
+            var intTest = 4;
+            
+            var alloc = new UnsafeAllocation<int>(ref intTest);
+
+            alloc.Value = 8;
+            
+            Debug.Log("test 3=" + alloc.Value);
         }
 
         protected override unsafe void OnUpdate()
@@ -66,7 +74,7 @@ namespace Stormium.Default.Tests
 
         public void NativeOnGUI()
         {
-            var gameTime = GetSingleton<GameTimeComponent>().Value;
+            var gameTime = GetSingleton<SingletonGameTime>();
             
             using (new GUILayout.VerticalScope())
             {

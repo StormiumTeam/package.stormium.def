@@ -1,6 +1,7 @@
 using package.stormium.def;
 using package.stormium.def.Kits.ProKit;
 using package.StormiumTeam.GameBase;
+using Stormium.Default.Actions.ProMinigun;
 using Stormium.Default.States;
 using Stormium.Default.Tests;
 using StormiumShared.Core.Networking;
@@ -105,15 +106,20 @@ namespace Stormium.Default.GameModes
             
             EntityManager.ReplaceOwnerData(chrEntity, playerEntity);
 
-            var rocketAction = World.GetExistingManager<ProRocketActionProvider>().SpawnLocal(chrEntity, 0);
+            /*var rocketAction = World.GetExistingManager<ProRocketActionProvider>().SpawnLocal(chrEntity, 0);
             var detonateAction = World.GetExistingManager<ProRocketDetonateActionProvider>().SpawnLocal(chrEntity, playerEntity, 1);
             
             EntityManager.AddComponentData(rocketAction, new DestroyChainReaction(chrEntity));
-            EntityManager.AddComponentData(detonateAction, new DestroyChainReaction(chrEntity));
+            EntityManager.AddComponentData(detonateAction, new DestroyChainReaction(chrEntity));*/
 
-            //var railgunAction = World.GetExistingManager<ProRailgunActionProvider>().SpawnLocal(chrEntity, new ProRailgunAction{ScanRadius = 0.1f}, 0);
+            /*var railgunAction = World.GetExistingManager<ProRailgunActionProvider>().SpawnLocal(chrEntity, new ProRailgunAction{ScanRadius = 0.1f}, 0);
             
-            //EntityManager.AddComponentData(railgunAction, new DestroyChainReaction(chrEntity));
+            EntityManager.AddComponentData(railgunAction, new DestroyChainReaction(chrEntity));*/
+
+            var minigunSettings = new ProMinigunAction.Settings {EndRadius = 0.5f, StartRadius = 0.01f, TransitionTime = 1f};
+            var minigunAction = World.GetExistingManager<ProMinigunActionProvider>().SpawnLocal(chrEntity, minigunSettings, 0);
+            
+            EntityManager.AddComponentData(minigunAction, new DestroyChainReaction(chrEntity));
 
             // Force camera
             var camera = EntityManager.GetComponentData<ServerCameraState>(playerEntity);

@@ -45,7 +45,7 @@ namespace package.stormium.def.Kits.ProKit
                 if (health.Health <= 0)
                     return;
 
-                var time = GetSingleton<GameTimeComponent>().Value;
+                var time = GetSingleton<SingletonGameTime>();
                 var transform         = controller.transform;
                 var position          = transform.position;
                 var rotation          = transform.rotation;

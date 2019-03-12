@@ -101,7 +101,7 @@ namespace Stormium.Default.Tests
 
             public SnapshotSender  Sender;
             public SnapshotRuntime Runtime;
-            public DataBufferReader  Buffer;
+            public UnsafeAllocation<DataBufferReader> BufferReference;
 
             public ComponentDataFromEntity<ProKitMovementSettings>              KitSettingFromEntity;
             public ComponentDataFromEntity<ProKitMovementState>              MovementStateFromEntity;
@@ -114,26 +114,28 @@ namespace Stormium.Default.Tests
 
             public void Execute()
             {
+                ref var buffer = ref BufferReference.AsRef();
+                
                 for (var i = 0; i != Runtime.Entities.Length; i++)
                 {
                     if (Runtime.Entities[i].ModelId != ModelId)
                         continue;
 
                     var entity   = Runtime.GetWorldEntityFromGlobal(i);
-                    var mask = Buffer.ReadValue<byte>();
+                    var mask = buffer.ReadValue<byte>();
                     byte maskPos = 0;
                     
                     if (MainBit.GetBitAt(mask, maskPos) == 1)
                     {
-                        KitSettingFromEntity[entity] = Buffer.ReadValue<ProKitMovementSettings>();
+                        KitSettingFromEntity[entity] = buffer.ReadValue<ProKitMovementSettings>();
                     }
 
                     maskPos++;
                     if (MainBit.GetBitAt(mask, maskPos) == 1)
                     {
-                        var airControl = Buffer.ReadValue<half>();
-                        var forceUnground = Buffer.ReadValue<byte>();
-                        Buffer.ReadDynIntegerFromMask(out var unsignedAirTime, out var unsignedWallBounceTick);
+                        var airControl = buffer.ReadValue<half>();
+                        var forceUnground = buffer.ReadValue<byte>();
+                        buffer.ReadDynIntegerFromMask(out var unsignedAirTime, out var unsignedWallBounceTick);
 
                         MovementStateFromEntity[entity] = new ProKitMovementState
                         {
@@ -147,13 +149,13 @@ namespace Stormium.Default.Tests
                     maskPos++;
                     if (MainBit.GetBitAt(mask, maskPos) == 1)
                     {
-                        KitInputFromEntity[entity] = Buffer.ReadValue<ProKitInputState>();
+                        KitInputFromEntity[entity] = buffer.ReadValue<ProKitInputState>();
                     }
 
                     maskPos++;
                     if (MainBit.GetBitAt(mask, maskPos) == 1)
                     {
-                        var aimLook = Buffer.ReadValue<half2>();
+                        var aimLook = buffer.ReadValue<half2>();
                         
                         AimLookFromEntity[entity] = new AimLookState(aimLook);
                     }
@@ -161,7 +163,7 @@ namespace Stormium.Default.Tests
                     maskPos++;
                     if (MainBit.GetBitAt(mask, maskPos) == 1)
                     {
-                        var velocity = Buffer.ReadValue<half3>();
+                        var velocity = buffer.ReadValue<half3>();
                         
                         VelocityFromEntity[entity] = new Velocity(velocity);
                     }
@@ -169,8 +171,8 @@ namespace Stormium.Default.Tests
                     maskPos++;
                     if (MainBit.GetBitAt(mask, maskPos) == 1)
                     {
-                        var position = Buffer.ReadValue<half3>();
-                        var rotation = Buffer.ReadValue<half4>();
+                        var position = buffer.ReadValue<half3>();
+                        var rotation = buffer.ReadValue<half4>();
                         
                         TransformFromEntity[entity] = new TransformState(position, new quaternion(rotation));
                     }
@@ -239,9 +241,9 @@ namespace Stormium.Default.Tests
             {
                 ModelId = GetModelIdent().Id,
 
-                Sender  = sender,
-                Runtime = snapshotRuntime,
-                Buffer  = data,
+                Sender          = sender,
+                Runtime         = snapshotRuntime,
+                BufferReference = UnsafeAllocation.From(ref data),
 
                 KitSettingFromEntity    = GetComponentDataFromEntity<ProKitMovementSettings>(),
                 MovementStateFromEntity = GetComponentDataFromEntity<ProKitMovementState>(),

@@ -15,6 +15,7 @@ namespace Stormium.Default
 			if ((receiver.Flags & SnapshotFlags.FullData) != 0 || dataFromEntity.HasChange(entity))
 			{
 				MainBit.SetBitAt(ref mask, maskPos, 1);
+				maskPos++; 
 				return true;
 			}
 

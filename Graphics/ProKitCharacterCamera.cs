@@ -73,7 +73,7 @@ namespace Graphics
 			if (!EntityManager.HasComponent<ProKitMovementState>(character))
 				return;
 
-			var dt = GetSingleton<GameTimeComponent>().Value.DeltaTime;
+			var dt = GetSingleton<SingletonGameTime>().DeltaTime;
 
 			var controller = EntityManager.GetComponentObject<OpenCharacterController>(character);
 			var movementState = EntityManager.GetComponentData<ProKitMovementState>(character);

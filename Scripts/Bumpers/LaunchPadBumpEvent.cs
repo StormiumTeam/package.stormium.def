@@ -12,21 +12,21 @@ namespace Scripts.Bumpers
 {
 	public struct LaunchPadBumpEvent : IComponentData
 	{
-		
+
 	}
-	
+
 	public class LaunchPadBumpEventProvider : SystemProvider
 	{
 		private struct SerializeCollectionJob : IJob
 		{
 			public int ModelId;
-			
+
 			public SnapshotRuntime  Runtime;
 			public DataBufferWriter Buffer;
 
 			[ReadOnly]
 			public ComponentDataFromEntity<TargetBumpEvent> BumpEventFromEntity;
-			
+
 			public void Execute()
 			{
 				for (var i = 0; i != Runtime.Entities.Length; i++)
@@ -41,7 +41,7 @@ namespace Scripts.Bumpers
 					if (BumpEventFromEntity.Exists(source))
 					{
 						MainBit.SetBitAt(ref mask, 0, 1);
-						
+
 						BumpEventFromEntity[source].Write(ref Buffer, default, Runtime);
 					}
 
@@ -54,17 +54,16 @@ namespace Scripts.Bumpers
 		{
 			public int ModelId;
 
-			public SnapshotRuntime  Runtime;
-			public DataBufferReader Buffer;
+			public SnapshotRuntime                    Runtime;
+			public UnsafeAllocation<DataBufferReader> BufferReference;
 
-			public UnsafeAllocation<int> BufferCursor;
-
-			public ComponentDataFromEntity<TargetBumpEvent>   BumpEventFromEntity;
+			public ComponentDataFromEntity<TargetBumpEvent> BumpEventFromEntity;
 
 			public EntityCommandBuffer Ecb;
 
 			public void Execute()
 			{
+				ref var buffer = ref BufferReference.AsRef();
 				for (var i = 0; i != Runtime.Entities.Length; i++)
 				{
 					var (source, modelId) = Runtime.Entities[i];
@@ -72,13 +71,13 @@ namespace Scripts.Bumpers
 						continue;
 
 					var worldEntity = Runtime.EntityToWorld(source);
-					var mask        = Buffer.ReadValue<byte>();
+					var mask        = buffer.ReadValue<byte>();
 
 					if (MainBit.GetBitAt(mask, 0) == 1)
 					{
 						var bumpEvent = new TargetBumpEvent();
-						
-						bumpEvent.Read(ref Buffer, Runtime.Header.Sender, Runtime);
+
+						bumpEvent.Read(ref buffer, Runtime.Header.Sender, Runtime);
 
 						if (BumpEventFromEntity.Exists(worldEntity))
 							BumpEventFromEntity[worldEntity] = bumpEvent;
@@ -86,8 +85,6 @@ namespace Scripts.Bumpers
 							Ecb.AddComponent(worldEntity, bumpEvent);
 					}
 				}
-
-				BufferCursor.Value = Buffer.CurrReadIndex;
 			}
 		}
 
@@ -96,10 +93,10 @@ namespace Scripts.Bumpers
 			entityComponents = new[]
 			{
 				ComponentType.ReadWrite<GameEvent>(),
-				ComponentType.ReadWrite<TargetBumpEvent>(), 
-				ComponentType.ReadWrite<LaunchPadBumpEvent>(), 
+				ComponentType.ReadWrite<TargetBumpEvent>(),
+				ComponentType.ReadWrite<LaunchPadBumpEvent>(),
 				ComponentType.ReadWrite<ExcludeFromDataStreamer>(),
-				ComponentType.ReadWrite<GenerateEntitySnapshot>(), 
+				ComponentType.ReadWrite<GenerateEntitySnapshot>(),
 			};
 			excludedComponents = null;
 		}
@@ -119,17 +116,14 @@ namespace Scripts.Bumpers
 
 		public override void DeserializeCollection(ref DataBufferReader data, SnapshotSender sender, SnapshotRuntime snapshotRuntime)
 		{
-			using (var bufferCursor = new UnsafeAllocation<int>(Allocator.TempJob, data.CurrReadIndex))
 			using (var ecb = new EntityCommandBuffer(Allocator.TempJob))
 			{
 				new DeserializeCollectionJob
 				{
 					ModelId = GetModelIdent().Id,
 
-					Runtime = snapshotRuntime,
-					Buffer  = data,
-
-					BufferCursor = bufferCursor,
+					Runtime         = snapshotRuntime,
+					BufferReference = UnsafeAllocation.From(ref data),
 
 					BumpEventFromEntity = GetComponentDataFromEntity<TargetBumpEvent>(),
 
@@ -144,7 +138,7 @@ namespace Scripts.Bumpers
 		{
 			return EntityManager.CreateEntity(EntityComponents);
 		}
-		
+
 		public override Entity SpawnLocalEntityDelayed(EntityCommandBuffer entityCommandBuffer)
 		{
 			var e = entityCommandBuffer.CreateEntity(EntityArchetype);

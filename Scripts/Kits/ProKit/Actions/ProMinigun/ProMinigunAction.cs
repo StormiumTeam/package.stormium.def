@@ -2,6 +2,7 @@ using System;
 using package.StormiumTeam.GameBase;
 using Stormium.Core;
 using Stormium.Default.Kits.ProKit;
+using StormiumShared.Core;
 using StormiumShared.Core.Networking;
 using StormiumTeam.GameBase;
 using Unity.Collections;
@@ -71,9 +72,9 @@ namespace Stormium.Default.Actions.ProMinigun
 			{
 				for (var i = 0; i != entityArray.Length; i++)
 				{
-					var state    = UnsafeUtilityEx.ArrayElementAsRef<ProMinigunAction.PredictedState>(settingsArray.GetUnsafePtr(), i);
-					var ammo     = UnsafeUtilityEx.ArrayElementAsRef<ActionAmmo>(ammoArray.GetUnsafePtr(), i);
-					var cooldown = UnsafeUtilityEx.ArrayElementAsRef<ActionCooldown>(cooldownArray.GetUnsafePtr(), i);
+					ref var state    = ref UnsafeUtilityEx.ArrayElementAsRef<ProMinigunAction.PredictedState>(stateArray.GetUnsafePtr(), i);
+					ref var ammo     = ref UnsafeUtilityEx.ArrayElementAsRef<ActionAmmo>(ammoArray.GetUnsafePtr(), i);
+					ref var cooldown = ref UnsafeUtilityEx.ArrayElementAsRef<ActionCooldown>(cooldownArray.GetUnsafePtr(), i);
 
 					Operate(entityArray[i], settingsArray[i], ref state, ref ammo, ref cooldown, slotInputArray[i], ownerArray[i]);
 				}
@@ -92,7 +93,14 @@ namespace Stormium.Default.Actions.ProMinigun
 		                       in  StActionSlotInput               input,
 		                       in  OwnerState<LivableDescription>  owner)
 		{
-			if (input.IsActive && cooldown.CooldownFinished(Tick) && ammo.Value >= ammo.Usage)
+			var spin = input.IsActive;
+			var dt = GetSingleton<SingletonGameTime>().DeltaTime;
+
+			state.InShootingDuration = max(state.InShootingDuration + (spin ? dt : -dt), 0);
+			if (!spin)
+				state.InShootingDuration = min(state.InShootingDuration, 1);
+			
+			if (spin && ammo.Value >= ammo.Usage && cooldown.CooldownFinished(Tick))
 			{
 				ammo.ModifyAmmo(ammo.Value - ammo.Usage);
 				cooldown.StartTick = Tick;
@@ -103,11 +111,13 @@ namespace Stormium.Default.Actions.ProMinigun
 
 				GetPosition(in owner.Target, out var position);
 				GetDirectionWithAimDelta(in owner.Target, in offset, out var direction);
+				
+				Debug.DrawRay(position, direction * 32f, Color.black, 1f);
 
 				SpawnRequests.Add(new CreateProjectileRequest
 				{
 					position  = position,
-					direction = direction,
+					direction = direction * 200f,
 					action = entity
 				});
 			}

@@ -17,7 +17,7 @@ namespace Scripts
 
         protected override void OnUpdate()
         {
-            m_Delta = GetSingleton<GameTimeComponent>().Value.DeltaTime;
+            m_Delta = GetSingleton<SingletonGameTime>().DeltaTime;
 
             var nMove = math.normalizesafe(new float2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")));
 

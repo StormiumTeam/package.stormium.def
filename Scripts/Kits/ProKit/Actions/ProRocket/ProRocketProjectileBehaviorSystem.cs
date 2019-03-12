@@ -50,7 +50,7 @@ namespace Stormium.Default
 					return;
 				}
 
-				var deltaTime = GetSingleton<GameTimeComponent>().Value.DeltaTime;
+				var deltaTime = GetSingleton<SingletonGameTime>().DeltaTime;
 				var targetPosition = translation.Value + velocity.Value * deltaTime;
 				var ray            = new Ray(translation.Value, normalizesafe(velocity.Value));
 

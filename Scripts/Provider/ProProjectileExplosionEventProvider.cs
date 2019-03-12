@@ -15,15 +15,16 @@ namespace Scripts.Provider
 		struct SerializeCollectionJob : IJob
 		{
 			public int ModelId;
-			
-			public SnapshotRuntime Runtime;
+
+			public SnapshotRuntime  Runtime;
 			public DataBufferWriter Buffer;
 
 			[ReadOnly]
 			public ComponentDataFromEntity<TargetBumpEvent> ExplosionEventFromEntity;
+
 			[ReadOnly]
 			public ComponentDataFromEntity<TargetDamageEvent> DamageEventFromEntity;
-			
+
 			public void Execute()
 			{
 				for (var i = 0; i != Runtime.Entities.Length; i++)
@@ -56,18 +57,17 @@ namespace Scripts.Provider
 		{
 			public int ModelId;
 
-			public SnapshotRuntime Runtime;
-			public DataBufferReader  Buffer;
+			public SnapshotRuntime                    Runtime;
+			public UnsafeAllocation<DataBufferReader> BufferReference;
 
-			public UnsafeAllocation<int> BufferCursor;
-
-			public ComponentDataFromEntity<TargetBumpEvent> ExplosionEventFromEntity;
+			public ComponentDataFromEntity<TargetBumpEvent>   ExplosionEventFromEntity;
 			public ComponentDataFromEntity<TargetDamageEvent> DamageEventFromEntity;
 
 			public EntityCommandBuffer Ecb;
 
 			public void Execute()
 			{
+				ref var buffer = ref BufferReference.AsRef();
 				for (var i = 0; i != Runtime.Entities.Length; i++)
 				{
 					var (source, modelId) = Runtime.Entities[i];
@@ -75,15 +75,15 @@ namespace Scripts.Provider
 						continue;
 
 					var worldEntity = Runtime.EntityToWorld(source);
-					var mask        = Buffer.ReadValue<byte>();
+					var mask        = buffer.ReadValue<byte>();
 
 					// TargetExplosionEvent
 					if (MainBit.GetBitAt(mask, 0) == 1)
 					{
 						var bumpEvent = new TargetBumpEvent();
-						
-						bumpEvent.Read(ref Buffer, Runtime.Header.Sender, Runtime);
-						
+
+						bumpEvent.Read(ref buffer, Runtime.Header.Sender, Runtime);
+
 						if (ExplosionEventFromEntity.Exists(worldEntity))
 							ExplosionEventFromEntity[worldEntity] = bumpEvent;
 						else
@@ -94,17 +94,15 @@ namespace Scripts.Provider
 					if (MainBit.GetBitAt(mask, 1) == 1)
 					{
 						var damageEvent = new TargetDamageEvent();
-						
-						damageEvent.Read(ref Buffer, Runtime.Header.Sender, Runtime);
-						
+
+						damageEvent.Read(ref buffer, Runtime.Header.Sender, Runtime);
+
 						if (DamageEventFromEntity.Exists(worldEntity))
 							DamageEventFromEntity[worldEntity] = damageEvent;
 						else
 							Ecb.AddComponent(worldEntity, damageEvent);
 					}
 				}
-
-				BufferCursor.Value = Buffer.CurrReadIndex;
 			}
 		}
 
@@ -140,32 +138,29 @@ namespace Scripts.Provider
 		{
 			new SerializeCollectionJob
 			{
-				ModelId = GetModelIdent().Id,
-				Buffer = data,
-				Runtime = snapshotRuntime,
+				ModelId                  = GetModelIdent().Id,
+				Buffer                   = data,
+				Runtime                  = snapshotRuntime,
 				ExplosionEventFromEntity = GetComponentDataFromEntity<TargetBumpEvent>(),
-				DamageEventFromEntity = GetComponentDataFromEntity<TargetDamageEvent>(),
+				DamageEventFromEntity    = GetComponentDataFromEntity<TargetDamageEvent>(),
 			}.Run();
 		}
 
 		public override void DeserializeCollection(ref DataBufferReader data, SnapshotSender sender, SnapshotRuntime snapshotRuntime)
 		{
 			using (var tempEcb = new EntityCommandBuffer(Allocator.TempJob))
-			using (var readCursor = new UnsafeAllocation<int>(Allocator.TempJob, 1))
 			{
 				new DeserializeCollectionJob
 				{
 					ModelId                  = GetModelIdent().Id,
-					Buffer                   = data,
+					BufferReference          = UnsafeAllocation.From(ref data),
 					Runtime                  = snapshotRuntime,
 					ExplosionEventFromEntity = GetComponentDataFromEntity<TargetBumpEvent>(),
 					DamageEventFromEntity    = GetComponentDataFromEntity<TargetDamageEvent>(),
-					
-					BufferCursor = readCursor,
+
 					Ecb = tempEcb
 				}.Run();
 
-				data.CurrReadIndex = readCursor.Value;
 				tempEcb.Playback(EntityManager);
 			}
 		}
