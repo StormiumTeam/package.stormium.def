@@ -3,7 +3,7 @@ using Unity.Mathematics;
 
 namespace package.stormium.def.Kits.ProKit
 {
-    public struct ProKitInputState : IStateData, IComponentData
+    public struct ProKitInputState : IComponentData
     {
         public float2 Movement;
         public byte   QueueJump;

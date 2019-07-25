@@ -1,5 +1,6 @@
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.StormiumTeam.GameBase;
+using Scripts.ActionBase;
 using Stormium.Core;
 using StormiumTeam.GameBase;
 using Unity.Collections;
@@ -28,7 +29,7 @@ namespace Stormium.Default.Kits.ProKit.ProShotgun
 			this = data.ReadValue<ProShotgunAction>();
 		}
 
-		public class Process : ActionBaseJobSystem
+		public class Process : DefaultActionBaseSystem<>
 		{
 			struct Job : IJobForEachWithEntity<ProShotgunAction, ActionAmmo, ActionCooldown, StActionSlotInput, Relative<MovableDescription>>
 			{
@@ -54,7 +55,7 @@ namespace Stormium.Default.Kits.ProKit.ProShotgun
 						cooldown.StartTick = GameTime.Tick;
 						ammo.IncreaseFromDelta(-ammo.Usage);
 
-						var helper = new ShootHelper(TransformFromEntity[movable.Target], EyePositionFromEntity[movable.Target], AimLookFromEntity[movable.Target]);
+						var helper = new ActionShootHelper(TransformFromEntity[movable.Target], EyePositionFromEntity[movable.Target], AimLookFromEntity[movable.Target]);
 
 						for (var x = 0; x != shotgun.Pattern.x; x++)
 						{

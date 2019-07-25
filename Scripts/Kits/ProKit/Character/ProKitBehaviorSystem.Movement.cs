@@ -160,8 +160,6 @@ namespace package.stormium.def.Kits.ProKit
                 // Dodge function.
                 if (canDodge)
                 {
-                    m_State = MovementType.Dodge;
-
                     movementState.LastSpecialMovement = ProKitMovementState.ESpecialMovement.Dodge;
 
                     var prevPos        = position;
@@ -172,7 +170,8 @@ namespace package.stormium.def.Kits.ProKit
                     controller.SlopeLimit = 80;
                     controller.Move(directionFwd * 1f);
 
-                    var rayMoveId = m_MoveId++;
+                    // Check if we can do a slide jump (should be redone with new physics)
+                    /*var rayMoveId = m_MoveId++;
                     foreach (var c in m_Collisions)
                     {
                         if (c.MoveId != rayMoveId)
@@ -187,7 +186,7 @@ namespace package.stormium.def.Kits.ProKit
                             upForce = 1 - c.Data.normal.y;
                             normal  = c.Data.normal;
                         }
-                    }
+                    }*/
 
                     controller.SlopeLimit = prevSlopeLimit;
                     transform.position    = prevPos;
@@ -206,16 +205,14 @@ namespace package.stormium.def.Kits.ProKit
                 if (canWallBounce)
                 {
                     Debug.Log("wallbounce!");
-
-                    m_State = MovementType.RayTrace;
-
+                    
+                    // SHOULD BE REDONE.
                     var collisionFlags = controller.Move(directionFwd * 0.3f) | controller.Move(leftFwd * 0.3f) | controller.Move(rightFwd * 0.3f);
-
                     if ((collisionFlags & CollisionFlags.Sides) != 0)
                     {
                         Vector3 normal = default;
 
-                        var rayMoveId = m_MoveId;
+                        /*var rayMoveId = m_MoveId;
                         foreach (var c in m_Collisions)
                         {
                             if (c.MoveId != rayMoveId)
@@ -224,7 +221,7 @@ namespace package.stormium.def.Kits.ProKit
                                 continue;
 
                             normal = c.Data.normal;
-                        }
+                        }*/
                         
                         var dodge = inputState.QueueDodge == 2;
                         var normalFwdAngleSin   = math.dot(directionFwd, RayUtility.SlideVelocityNoYChange(velocity.Value, normal).normalized);
@@ -275,8 +272,6 @@ namespace package.stormium.def.Kits.ProKit
                     controller.SetPosition(position, false);
                 }
 
-                m_State = MovementType.ApplyVelocity;
-
                 var avPos = transform.position;
                 var avY   = velocity.Value.y;
 
@@ -307,46 +302,6 @@ namespace package.stormium.def.Kits.ProKit
 
                 Profiler.EndSample();
                 velocity.Value.y = avY;
-
-                //Debug.Log(math.length(velocity.Value.xz));
-
-                var curMoveId = m_MoveId++;
-                foreach (var c in m_Collisions)
-                {
-                    if (c.MoveId != curMoveId)
-                        continue;
-
-                    /*if (c.moveDirection.y < 0)
-                    {
-                        continue;
-                    }
-
-                    var angle        = Vector3.Angle(c.normal, Vector3.down);
-                    var flatVelocity = new float3(velocity.Value.x, 0, velocity.Value.z);
-                    var flatNormal   = new float3(c.normal.x, 0, c.normal.z);
-
-                    var undesiredMotion = flatNormal * Vector3.Dot(flatVelocity, flatNormal);
-                    var desiredMotion   = flatVelocity - undesiredMotion;
-                    var desiredY        = desiredMotion.y;
-
-                    desiredMotion.y = 0;
-
-                    desiredMotion = Vector3.ClampMagnitude(desiredMotion, math.length(flatVelocity));
-
-                    desiredMotion.y = velocity.Value.y;
-                    velocity.Value  = desiredMotion;
-
-                    // Floor
-                    if ((controller.collisionFlags == CollisionFlags.Above
-                         || (int) controller.collisionFlags == 3)
-                        && angle < 90f && velocity.Value.y > 0)
-                    {
-                        Debug.Log("hello");
-                        velocity.Value.y = desiredY;
-                    }
-
-                    break;*/
-                }
             });
         }
     }

@@ -9,8 +9,7 @@ namespace Scripts.Bumpers
 		{
 			base.ValidateSerializedData(ref serializedData);
 
-			serializedData.reset = math.clamp(serializedData.reset, 0, 1);
-			serializedData.direction = math.normalizesafe(serializedData.direction);
+			serializedData.momentum  = math.clamp(serializedData.momentum, 0, 1);
 		}
 	}
 }

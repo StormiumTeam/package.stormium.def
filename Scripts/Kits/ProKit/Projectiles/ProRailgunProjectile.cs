@@ -1,8 +1,10 @@
+using System.Linq;
 using package.StormiumTeam.GameBase;
 using StormiumTeam.GameBase;
 using Stormium.Default.Kits.ProKit;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Transforms;
 
 namespace Scripts.Actions.ProRailgun
 {
@@ -11,80 +13,33 @@ namespace Scripts.Actions.ProRailgun
 		public float  ScanRadius;
 		public float3 HitPoint;
 		public float3 Direction;
-	}
 
-	[DisableAutoCreation]
-	public class ProRailgunProjectileSystem : GameBaseSystem
-	{
-		private PhysicQueryManager                m_PhysicQueryManager;
-		private ProProjectileExplosionEventProvider m_ExplosionEventProvider;
-
-		protected override void OnCreate()
+		public struct Create
 		{
-			base.OnCreate();
-
-			m_PhysicQueryManager     = World.GetOrCreateSystem<PhysicQueryManager>();
-			m_ExplosionEventProvider = World.GetOrCreateSystem<ProProjectileExplosionEventProvider>();
+			public Entity Owner;
+			public float3 Position;
+			public float3 Direction;
 		}
 
-		protected override void OnUpdate()
+		public class Provider : BaseProviderBatch<Create>
 		{
-			/*ForEach((Entity entity, ref ProProjectileData projectileData, ref ProRailgunProjectile railgun, ref Translation translation, ref EntityAuthority authority) =>
+			public override void GetComponents(out ComponentType[] entityComponents)
 			{
-				if (projectileData.phase != StandardProjectilePhase.Active)
-				{
-					if (projectileData.explodeTick + 1000 > Tick)
-						return;
+				entityComponents = ProHitScan.ProviderBasicComponents
+				                             .Append(typeof(ProRailgunProjectile))
+				                             .ToArray();
+			}
 
-					PostUpdateCommands.DestroyEntity(entity);
-					return;
-				}
+			public override void SetEntityData(Entity entity, Create data)
+			{
+				var tick = GetSingleton<GameTimeComponent>().Tick;
 
-				var ray = new Ray(translation.Value, railgun.Direction);
-
-				Debug.DrawRay(ray.origin, ray.direction * 10, Color.black, 1f);
-				Debug.DrawRay(ray.origin, ray.direction * 10, Color.red, 0.1f);
-				
-				m_PhysicQueryManager.EnableCollisionFor(entity);
-
-				if (Physics.SphereCast(ray, railgun.ScanRadius, out var hitInfo, 128.0f, GameBaseConstants.CollisionMask))
-				{
-					railgun.HitPoint           = hitInfo.point;
-					projectileData.explodeTick = Tick;
-					projectileData.phase = StandardProjectilePhase.Exploded;
-
-					var hitGameObjectEntity = hitInfo.collider.GetComponent<GameObjectEntity>();
-					if (hitGameObjectEntity && hitGameObjectEntity.EntityManager == EntityManager)
-					{
-						var delayedEvent = m_ExplosionEventProvider.SpawnLocalEntityDelayed(PostUpdateCommands);
-						
-						Debug.Log("Railgun Hit: " + hitGameObjectEntity.Entity);
-
-						PostUpdateCommands.AddComponent(delayedEvent, new TargetBumpEvent
-						{
-							Direction = ray.direction,
-							Force     = float3(1, 1, 1),
-							VelocityReset = float3(1, 1, 1),
-
-							Position = railgun.HitPoint,
-							Shooter  = entity,
-							Victim   = hitGameObjectEntity.Entity
-						});
-						PostUpdateCommands.AddComponent(delayedEvent, new TargetDamageEvent
-						{
-							DmgValue = 3,
-							Shooter  = entity,
-							Victim   = hitGameObjectEntity.Entity
-						});
-						
-						Debug.DrawLine(ray.origin, hitInfo.point, Color.green, 0.1f);
-					}
-				}
-
-				projectileData.phase = StandardProjectilePhase.None;
-
-				m_PhysicQueryManager.ReenableCollisions();
-			});*/
+				EntityManager.SetComponentData(entity, new Translation {Value                   = data.Position});
+				EntityManager.SetComponentData(entity, new Velocity {Value                      = data.Direction});
+				EntityManager.SetComponentData(entity, new ProProjectile.Settings {detectRadius = 0.1f, damageRadius                      = 0.11f, damage = 4});
+				EntityManager.SetComponentData(entity, new ProProjectile.PredictedState {phase  = StandardProjectilePhase.Active, endTick = tick + 145});
+				EntityManager.ReplaceOwnerData(entity, data.Owner);
+			}
 		}
 	}
 }

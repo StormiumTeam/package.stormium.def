@@ -14,7 +14,7 @@ namespace Scripts.ActionBase
 		Entity Target { get; set; }
 	}
 
-	public class DefaultActionBaseSystem<TAction, TFillJob, TShootEvent> : ActionBaseSystem
+	public class DefaultActionBaseSystem<TAction, TFillJob, TShootEvent> : JobGameBaseSystem
 		where TAction : struct, IComponentData
 		where TFillJob : struct, DefaultActionBaseSystem<TAction, TFillJob, TShootEvent>.IFillJob
 		where TShootEvent : struct, IShootEvent, IComponentData
@@ -22,7 +22,7 @@ namespace Scripts.ActionBase
 		public interface IFillJob
 		{
 			void Setup();
-			void Shoot(TShootEvent ev, TAction action, Entity owner, ShootHelper sh);
+			void Shoot(TShootEvent ev, TAction action, Entity owner, ActionShootHelper sh);
 		}
 
 		[RequireComponentTag(typeof(ActionAutomatic))]
@@ -50,7 +50,7 @@ namespace Scripts.ActionBase
 					cooldown.StartTick = GameTime.Tick;
 					ammo.IncreaseFromDelta(-ammo.Usage);
 
-					var sh = new ActionBaseSystem.ShootHelper(TransformFromEntity[owner.Target], EyePositionFromEntity[owner.Target], AimLookFromEntity[owner.Target]);
+					var sh = new ActionShootHelper(TransformFromEntity[owner.Target], EyePositionFromEntity[owner.Target], AimLookFromEntity[owner.Target]);
 
 					FillJob.Shoot(default, action, owner.Target, sh);
 				}
@@ -75,7 +75,7 @@ namespace Scripts.ActionBase
 				var action = ActionSettingsFromEntity[shootEvent.Target];
 				var owner  = OwnerFromEntity[shootEvent.Target];
 
-				var sh = new ActionBaseSystem.ShootHelper(TransformFromEntity[owner.Target], EyePositionFromEntity[owner.Target], AimLookFromEntity[owner.Target]);
+				var sh = new ActionShootHelper(TransformFromEntity[owner.Target], EyePositionFromEntity[owner.Target], AimLookFromEntity[owner.Target]);
 
 				FillJob.Shoot(shootEvent, action, owner.Target, sh);
 			}

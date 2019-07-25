@@ -1,9 +1,14 @@
 using System;
 using System.Collections.Generic;
 using StormiumTeam.GameBase;
+using StormiumTeam.GameBase.Components;
+using StormiumTeam.Shared.Gen;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.NetCode;
 using Unity.Physics;
 using Unity.Transforms;
 using UnityEngine;
@@ -14,135 +19,157 @@ namespace Scripts.Bumpers
 	public struct LaunchPad : IComponentData
 	{
 		public float3 direction;
-		public float3 reset;
-		public float force;
+		public float3 momentum;
+		public float  force;
 	}
 
-	public unsafe class LaunchPadSystem : GameBaseSystem
+	[InternalBufferCapacity(16)]
+	public struct LaunchPadCooldown : IBufferElementData
 	{
-		private struct ValuePadCooldown
+		public Entity Target;
+		public int    RemoveAtTick;
+	}
+
+	[UpdateInGroup(typeof(ServerSimulationSystemGroup))]
+	public unsafe class LaunchPadSystem : JobGameBaseSystem
+	{
+		[BurstCompile]
+		private struct Job : IJobForEachWithEntity<LocalToWorld, LaunchPad, PhysicsCollider>
 		{
-			public Entity PadEntity;
-			public int LastTick;
+			[ReadOnly] public int Tick;
+
+			[ReadOnly] public NativeArray<ArchetypeChunk>                  MovableChunks;
+			[ReadOnly] public ArchetypeChunkEntityType                     EntityType;
+			[ReadOnly] public ArchetypeChunkComponentType<LocalToWorld>    LocalToWorldType;
+			[ReadOnly] public ArchetypeChunkComponentType<PhysicsCollider> PhysicsColliderType;
+
+			[ReadOnly] public BufferFromEntity<LaunchPadCooldown> CooldownFromEntity;
+
+			[WriteOnly] public NativeList<TargetImpulseEvent> ImpulseEventList;
+
+			private bool Bump(Entity padEntity,     LocalToWorld padTransform,     LaunchPad       pad, PhysicsCollider padCollider,
+			                  Entity movableEntity, LocalToWorld movableTransform, PhysicsCollider movableCollider)
+			{
+				var padRigidTransform     = new RigidTransform(padTransform.Value);
+				var movableRigidTransform = new RigidTransform(movableTransform.Value);
+
+				if (!padCollider.ColliderPtr->CalculateAabb(padRigidTransform).Overlaps(movableCollider.ColliderPtr->CalculateAabb(movableRigidTransform)))
+					return false;
+
+				var collection = new CustomCollideCollection(new CustomCollide(movableCollider, movableTransform));
+				var penetrateInput = new ColliderDistanceInput
+				{
+					Collider    = padCollider.ColliderPtr,
+					MaxDistance = 0f,
+					Transform   = padRigidTransform
+				};
+
+				var anyCollector = new AnyHitCollector<DistanceHit>(0.0f);
+				if (!collection.CalculateDistance(penetrateInput, ref anyCollector))
+					return false;
+
+				ImpulseEventList.Add(new TargetImpulseEvent
+				{
+					Origin      = padEntity,
+					Destination = movableEntity,
+
+					Force    = math.normalizesafe(pad.direction) * pad.force,
+					Momentum = pad.momentum,
+					Position = padTransform.Position,
+				});
+
+				return true;
+			}
+
+			public void Execute(Entity padEntity, int index, [ReadOnly] ref LocalToWorld padTransform, [ReadOnly] ref LaunchPad launchPad, [ReadOnly] ref PhysicsCollider padCollider)
+			{
+				var cooldownBuffer = CooldownFromEntity[padEntity];
+				// Delete previous cooldown...
+				for (var c = 0; c != cooldownBuffer.Length; c++)
+				{
+					if (cooldownBuffer[c].RemoveAtTick >= Tick)
+						continue;
+
+					cooldownBuffer.RemoveAt(c);
+					c--;
+				}
+
+				// We can't add more cooldown elements...
+				if (cooldownBuffer.Length >= cooldownBuffer.Capacity)
+					return;
+
+				for (var chk = 0; chk != MovableChunks.Length; chk++)
+				{
+					var movableEntityArray    = MovableChunks[chk].GetNativeArray(EntityType);
+					var movableTransformArray = MovableChunks[chk].GetNativeArray(LocalToWorldType);
+					var movableColliderArray  = MovableChunks[chk].GetNativeArray(PhysicsColliderType);
+
+					var count = MovableChunks[chk].Count;
+					for (var ent = 0; ent != count; ent++)
+					{
+						var ctn = false;
+						for (var c = 0; c != cooldownBuffer.Length; c++)
+						{
+							if (cooldownBuffer[c].Target != movableEntityArray[ent])
+								continue;
+
+							ctn = true;
+							break;
+						}
+
+						if (ctn)
+							continue;
+
+						if (Bump
+						(
+							padEntity, padTransform, launchPad, padCollider,
+							movableEntityArray[ent], movableTransformArray[ent], movableColliderArray[ent]
+						))
+						{
+							cooldownBuffer.Add(new LaunchPadCooldown {Target = movableEntityArray[ent], RemoveAtTick = Tick + GameTime.Convert(100)});
+						}
+					}
+				}
+			}
 		}
 
 		private EntityQuery m_LaunchPadQuery;
 		private EntityQuery m_MovableQuery;
-		
-		// TODO: Replace this with a buffer on the pad entity instead
-		private Dictionary<Entity, ValuePadCooldown> m_Cooldowns;
+
+		private TargetImpulseEvent.Provider m_TargetImpulseEventProvider;
 
 		protected override void OnCreate()
 		{
 			base.OnCreate();
 
-			m_Cooldowns = new Dictionary<Entity, ValuePadCooldown>();
-			m_LaunchPadQuery = Entities.WithAll<LocalToWorld, LaunchPad>().ToEntityQuery();
-			m_MovableQuery = Entities.WithAll<LocalToWorld, LivableDescription>().ToEntityQuery();
+			m_LaunchPadQuery = GetEntityQuery(typeof(LocalToWorld), typeof(LaunchPad));
+			m_MovableQuery   = GetEntityQuery(typeof(LocalToWorld), typeof(MovableDescription));
+
+			m_TargetImpulseEventProvider = World.GetOrCreateSystem<TargetImpulseEvent.Provider>();
 		}
 
-		public void OnBump(Entity padEntity,     LocalToWorld padTransform,     LaunchPad       pad, PhysicsCollider padCollider,
-		                   Entity movableEntity, LocalToWorld movableTransform, PhysicsCollider movableCollider)
+		protected override JobHandle OnUpdate(JobHandle inputDeps)
 		{
-			var padRigidTransform     = new RigidTransform(padTransform.Value);
-			var movableRigidTransform = new RigidTransform(movableTransform.Value);
+			m_MovableQuery.AddDependency(inputDeps);
 
-			if (!padCollider.ColliderPtr->CalculateAabb(padRigidTransform)
-				.Overlaps(movableCollider.ColliderPtr->CalculateAabb(movableRigidTransform)))
-				return;
-
-			var cwAgainst  = new CustomCollide(movableCollider, movableTransform);
-			var collection = new CustomCollideCollection(&cwAgainst);
-			var penetrateInput = new ColliderDistanceInput
+			var movableChunks = m_MovableQuery.CreateArchetypeChunkArray(Allocator.TempJob, out var dependency);
+			inputDeps = new Job
 			{
-				Collider    = padCollider.ColliderPtr,
-				MaxDistance = 0f,
-				Transform   = padRigidTransform
-			};
+				Tick = GameTime.Tick,
 
-			var anyCollector = new AnyHitCollector<DistanceHit>(0.0f);
-			if (!collection.CalculateDistance(penetrateInput, ref anyCollector))
-				return;
+				MovableChunks       = movableChunks,
+				EntityType          = GetArchetypeChunkEntityType(),
+				LocalToWorldType    = GetArchetypeChunkComponentType<LocalToWorld>(true),
+				PhysicsColliderType = GetArchetypeChunkComponentType<PhysicsCollider>(true),
 
-			// Create Bump event
-			Debug.Log("Bump!");
+				ImpulseEventList = m_TargetImpulseEventProvider.GetEntityDelayedList(),
 
-			var canBump = !m_Cooldowns.TryGetValue(movableEntity, out var cooldown) // if the value don't exist in the dictionary, it's ok
-			              || cooldown.LastTick + 100 < Tick                         // if the cooldown is over, it's ok
-			              || cooldown.PadEntity != padEntity;                       // if the last triggered pad isn't the same, it's ok
+				CooldownFromEntity = GetBufferFromEntity<LaunchPadCooldown>()
+			}.ScheduleSingle(m_LaunchPadQuery, JobHandle.CombineDependencies(inputDeps, dependency));
 
-			if (!canBump)
-				return;
+			m_TargetImpulseEventProvider.AddJobHandleForProducer(inputDeps);
 
-			m_Cooldowns[movableEntity] = new ValuePadCooldown
-			{
-				PadEntity = padEntity,
-				LastTick  = GameTime.Tick
-			};
-
-			var provider = World.Active.GetExistingSystem<LaunchPadBumpEventProvider>();
-			var delayList = provider.GetEntityDelayedList();
-			
-			delayList.Add(new LaunchPadBumpEventProvider.Create
-			{
-				data = new TargetBumpEvent
-				{
-					Direction     = pad.direction,
-					VelocityReset = pad.reset,
-					Force         = pad.force,
-					Position      = padTransform.Position,
-
-					Shooter = padEntity,
-					Victim  = movableEntity
-				}
-			});
-		}
-
-		protected override void OnUpdate()
-		{
-			var launchPadChunks = m_LaunchPadQuery.CreateArchetypeChunkArray(Allocator.TempJob);
-			var launchPadChunksEnumerator = launchPadChunks.GetEnumerator();
-
-			var movableChunks = m_MovableQuery.CreateArchetypeChunkArray(Allocator.TempJob);
-			var movableChunksEnumerator = movableChunks.GetEnumerator();
-			
-			var entityType = GetArchetypeChunkEntityType();
-			var ltwType = GetArchetypeChunkComponentType<LocalToWorld>(true);
-			var launchPadType = GetArchetypeChunkComponentType<LaunchPad>(true);
-
-			while (launchPadChunksEnumerator.MoveNext())
-			{
-				var launchPadChunk = launchPadChunksEnumerator.Current;
-
-				var entityArray    = launchPadChunk.GetNativeArray(entityType);
-				var ltwArray       = launchPadChunk.GetNativeArray(ltwType);
-				var launchPadArray = launchPadChunk.GetNativeArray(launchPadType);
-				for (var i = 0; i != launchPadChunk.Count; i++)
-				{
-					var entity       = entityArray[i];
-					var localToWorld = ltwArray[i];
-					var launchPad    = launchPadArray[i];
-
-					movableChunksEnumerator.Reset();
-					while (movableChunksEnumerator.MoveNext())
-					{
-						var movableChunk = movableChunksEnumerator.Current;
-
-						var movableEntityArray = movableChunk.GetNativeArray(entityType);
-						var movableLtwArray    = movableChunk.GetNativeArray(ltwType);
-						for (var j = 0; j != movableChunk.Count; j++)
-						{
-							//OnBump();
-						}
-					}
-				}
-			}
-
-			launchPadChunksEnumerator.Dispose();
-			launchPadChunks.Dispose();
-			
-			movableChunksEnumerator.Dispose();
-			movableChunks.Dispose();
+			return inputDeps;
 		}
 	}
 }

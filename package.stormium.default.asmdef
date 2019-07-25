@@ -10,6 +10,7 @@
         "package.stormium.core",
         "package.stormiumteam.networking",
         "package.stormiumteam.inputs",
+        "Unity.NetCode",
         "Unity.InputSystem",
         "Unity.Entities",
         "Unity.Entities.Hybrid",

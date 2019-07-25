@@ -6,6 +6,7 @@ using StormiumTeam.GameBase.Components;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Physics;
 using Unity.Physics.Systems;
 using Unity.Transforms;
@@ -40,17 +41,14 @@ namespace Stormium.Default.Kits.ProKit
 			ComponentType.ReadWrite<Translation>(),
 			ComponentType.ReadWrite<Rotation>(),
 			ComponentType.ReadWrite<LocalToWorld>(),
-			ComponentType.ReadWrite<TransformState>(),
-			ComponentType.ReadWrite<TransformStateDirection>(),
 			ComponentType.ReadWrite<ProProjectile.Settings>(),
 			ComponentType.ReadWrite<ProProjectile.PredictedState>(),
 			ComponentType.ReadWrite<Velocity>(),
-			ComponentType.ReadWrite<CollideWith>(),
-			ComponentType.ReadWrite<GenerateEntitySnapshot>()
+			ComponentType.ReadWrite<CollideWith>()
 		};
 
 		[Serializable]
-		public struct PredictedState : IComponentData, IInterpolatable<PredictedState>, IPredictable<PredictedState>
+		public struct PredictedState : IComponentData
 		{
 			public StandardProjectilePhase   phase;
 			public StandardProjectileEndType endType;
@@ -58,22 +56,8 @@ namespace Stormium.Default.Kits.ProKit
 			public int                       hitTick;
 			public int                       bounce;
 			public float3                    explodeNormalHit;
-			
+
 			public bool startDamageEvent;
-
-			public bool VerifyPrediction(in PredictedState real)
-			{
-				return phase >= real.phase
-				       && real.endTick - endTick <= 50 && real.endTick - endTick >= 0
-				       && bounce - real.bounce <= 1 && bounce - real.bounce >= 0;
-			}
-
-			public void Interpolate(in PredictedState next, float progress)
-			{
-				phase   = next.phase;
-				endTick = (int) lerp(endTick, next.endTick, progress);
-				bounce  = next.bounce;
-			}
 		}
 
 		[Serializable]
@@ -97,23 +81,24 @@ namespace Stormium.Default.Kits.ProKit
 		}
 	}
 
-	[UpdateInGroup(typeof(ProProjectileSystemGroup))]
+	[UpdateInGroup(typeof(ProjectileSystemGroup))]
+	[UpdateBefore(typeof(ProjectilePhysicIterationSystemGroup))]
 	public class ProProjectileProcessSystemGroup : ComponentSystemGroup
 	{
 	}
 
-	[UpdateInGroup(typeof(ProProjectileSystemGroup))]
+	[UpdateInGroup(typeof(ProjectilePhysicIterationSystemGroup))]
 	public class ProProjectilePhysicsSystemGroup : ComponentSystemGroup
 	{
 	}
 
-	[UpdateInGroup(typeof(ProProjectileSystemGroup))]
+	[UpdateInGroup(typeof(ProjectilePhysicCollisionEventSystemGroup))]
 	public class ProProjectileEventSystemGroup : ComponentSystemGroup
 	{
 	}
 
 	[UpdateInGroup(typeof(ProProjectileProcessSystemGroup))]
-	public class ProProjectileProcessSystem : GameBaseSystem
+	public class ProProjectileProcessSystem : JobGameBaseSystem
 	{
 		[BurstCompile]
 		private struct Job : IJobForEachWithEntity<ProProjectile.Settings, ProProjectile.PredictedState, Translation, Velocity>
@@ -140,28 +125,34 @@ namespace Stormium.Default.Kits.ProKit
 			}
 		}
 
+		private EntityQuery                            m_Query;
+		private EndProjectileEntityCommandBufferSystem m_EndBarrier;
+
 		protected override void OnCreate()
 		{
 			base.OnCreate();
 
 			// we need one without the CW buffer, so this system can still run
-			GetEntityQuery(typeof(ProProjectile.Settings), typeof(ProProjectile.PredictedState), typeof(Translation), typeof(Velocity));
+			m_Query      = GetEntityQuery(typeof(ProProjectile.Settings), typeof(ProProjectile.PredictedState), typeof(Translation), typeof(Velocity));
+			m_EndBarrier = World.GetOrCreateSystem<EndProjectileEntityCommandBufferSystem>();
 		}
-
-		protected override void OnUpdate()
+		
+		protected override JobHandle OnUpdate(JobHandle inputDeps)
 		{
-			var job = new Job
+			inputDeps = JobForEachExtensions.Schedule(new Job
 			{
 				Time = GetSingleton<GameTimeComponent>(),
-				Ecb  = PostUpdateCommands.ToConcurrent()
-			};
+				Ecb  = m_EndBarrier.CreateCommandBuffer().ToConcurrent()
+			}, m_Query, inputDeps);
 
-			job.Run(this);
+			m_EndBarrier.AddJobHandleForProducer(inputDeps);
+
+			return inputDeps;
 		}
 	}
 
 	[UpdateInGroup(typeof(ProProjectilePhysicsSystemGroup))]
-	public unsafe class ProProjectilePhysicsSystem : GameBaseSystem
+	public unsafe class ProProjectilePhysicsSystem : JobGameBaseSystem
 	{
 		[BurstCompile]
 		struct Job : IJobForEachWithEntity<ProProjectile.Settings, ProProjectile.PredictedState, Translation, Velocity>
@@ -178,21 +169,19 @@ namespace Stormium.Default.Kits.ProKit
 
 			public PhysicsWorld PhysicsWorld;
 
-			public EntityCommandBuffer.Concurrent Ecb;
-
 			public void Execute(Entity entity, int idx, [ReadOnly] ref ProProjectile.Settings settings, ref ProProjectile.PredictedState state, ref Translation translation, ref Velocity velocity)
 			{
 				if (state.phase != StandardProjectilePhase.Active || settings.manualPhysicSimulation)
 					return;
-					
+
 				var targetPosition = translation.Value + velocity.Value * Time.DeltaTime;
 
 				// first, make a standard check on static collider / rigidBodies
 				var castInput = new ColliderCastInput
 				{
 					Collider    = SphereQuery.Ptr,
-					Position    = translation.Value,
-					Direction   = velocity.Value * Time.DeltaTime,
+					Start       = translation.Value,
+					End         = translation.Value + velocity.Value * Time.DeltaTime,
 					Orientation = quaternion.identity
 				};
 
@@ -201,8 +190,8 @@ namespace Stormium.Default.Kits.ProKit
 				sphereCollider->Filter = new CollisionFilter
 				{
 					GroupIndex   = 0,
-					CategoryBits = CollisionFilter.Default.CategoryBits,
-					MaskBits     = CollisionFilter.Default.MaskBits
+					BelongsTo    = CollisionFilter.Default.BelongsTo,
+					CollidesWith = CollisionFilter.Default.CollidesWith
 				};
 				NativeArray<int> filter = default;
 				if (CollideWithFromEntity.Exists(entity))
@@ -264,46 +253,44 @@ namespace Stormium.Default.Kits.ProKit
 
 				if (state.phase == StandardProjectilePhase.Ended)
 					state.startDamageEvent = true;
-				
+
 				translation.Value = targetPosition;
 			}
 		}
 
 		public JobPhysicsQuery SphereQuery;
 		public EntityQuery     FilterQuery;
+		public EntityQuery     ProjectileQuery;
 
 		protected override void OnCreate()
 		{
 			base.OnCreate();
-			
+
 			SphereQuery = new JobPhysicsQuery(() => SphereCollider.Create(0, 0.01f, CollisionFilter.Default));
 			FilterQuery = GetEntityQuery(typeof(ProProjectile.Settings), typeof(ProProjectile.PredictedState), typeof(Velocity), typeof(Translation), typeof(CollideWith));
-			
+
 			// one without CW..
-			GetEntityQuery(typeof(ProProjectile.Settings), typeof(ProProjectile.PredictedState), typeof(Velocity), typeof(Translation));
+			ProjectileQuery = GetEntityQuery(typeof(ProProjectile.Settings), typeof(ProProjectile.PredictedState), typeof(Velocity), typeof(Translation));
 		}
 
-		protected override void OnUpdate()
+		protected override JobHandle OnUpdate(JobHandle inputDeps)
 		{
-			World.GetExistingSystem<CollisionFilterSystemGroup>().Filter(FilterQuery);
-
-			var job = new Job
+			inputDeps = World.GetExistingSystem<CollisionFilterSystemGroup>().Filter(FilterQuery, inputDeps);
+			inputDeps = JobForEachExtensions.Schedule(new Job
 			{
 				Time                     = GetSingleton<GameTimeComponent>(),
 				CollideWithFromEntity    = GetBufferFromEntity<CollideWith>(),
 				EnvironmentTagFromEntity = GetComponentDataFromEntity<EnvironmentTag>(),
 				PhysicsWorld             = World.GetExistingSystem<BuildPhysicsWorld>().PhysicsWorld,
-				Ecb                      = PostUpdateCommands.ToConcurrent(),
 				SphereQuery              = SphereQuery
-			};
-			job.Run(this);
+			}, ProjectileQuery, inputDeps);
 
-			World.GetExistingSystem<ColliderCastEventProvider>().FlushDelayedEntities();
+			return inputDeps;
 		}
 	}
 
 	[UpdateInGroup(typeof(ProProjectileEventSystemGroup))]
-	public unsafe class ProProjectileEventSystem : GameBaseSystem
+	public unsafe class ProProjectileEventSystem : JobGameBaseSystem
 	{
 		private struct ChunkPayload
 		{
@@ -319,9 +306,9 @@ namespace Stormium.Default.Kits.ProKit
 		}
 
 		[BurstCompile]
-		struct Job : IJobForEachWithEntity<ProProjectile.Settings, ProProjectile.PredictedState, Translation, Velocity>
+		private struct Job : IJobForEachWithEntity<ProProjectile.Settings, ProProjectile.PredictedState, Translation, Velocity>
 		{
-			public EntityCommandBuffer.Concurrent Ecb;
+			public NativeList<TargetDamageEvent> DamageEventList;
 			public ChunkPayload CPayload;
 
 			public void Execute(Entity entity, int idx, [ReadOnly] ref ProProjectile.Settings settings, ref ProProjectile.PredictedState state, ref Translation translation, ref Velocity velocity)
@@ -330,11 +317,11 @@ namespace Stormium.Default.Kits.ProKit
 					return;
 
 				state.startDamageEvent = false;
-				
+
 				var rayInput = new RaycastInput
 				{
 					Filter = CollisionFilter.Default,
-					Ray    = new Ray {Origin = translation.Value}
+					Start  = translation.Value
 				};
 				var closestRayHit = new ClosestHitCollector<RaycastHit>(1.0f);
 
@@ -351,19 +338,22 @@ namespace Stormium.Default.Kits.ProKit
 						var localToWorld = localToWorldArray[entityIndex];
 						var collider     = colliderArray[entityIndex];
 
-						rayInput.Ray.Direction = normalizesafe(localToWorld.Position - rayInput.Ray.Origin) * settings.damageRadius;
-						
+						var dir = normalizesafe(localToWorld.Position - rayInput.Start);
+						rayInput.End = translation.Value + dir * settings.damageRadius;
+						// ^ this feels awkward, maybe we could do a collider cast instead?....
+
 						var collection = new CustomCollideCollection(new CustomCollide(collider, localToWorld));
 						if (!collection.CastRay(rayInput, ref closestRayHit))
 							continue;
-						
+
 						// if you want to redirect damage to another entity, you can add a HealthRedirection health type to this entity.
 						var toDamage = entityArray[entityIndex];
-
-						var dmgEv = Ecb.CreateEntity(idx);
-
-						Ecb.AddComponent(idx, dmgEv, new GameEvent());
-						Ecb.AddComponent(idx, dmgEv, new TargetDamageEvent {DmgValue = -settings.damage, Shooter = entity, Victim = toDamage});
+						DamageEventList.Add(new TargetDamageEvent
+						{
+							Damage = -settings.damage, 
+							Origin = entity,
+							Destination = toDamage
+						});
 					}
 				}
 
@@ -396,28 +386,33 @@ namespace Stormium.Default.Kits.ProKit
 		}
 
 		public EntityQuery     HitColliderQuery;
-
+		private TargetDamageEvent.Provider m_DamageEventProvider;
+		
 		protected override void OnCreate()
 		{
 			base.OnCreate();
 			
 			HitColliderQuery = GetEntityQuery(typeof(LocalToWorld), typeof(PhysicsCollider), typeof(HealthContainer));
+			m_DamageEventProvider = World.GetOrCreateSystem<TargetDamageEvent.Provider>();
 		}
 
-		protected override void OnUpdate()
+		protected override JobHandle OnUpdate(JobHandle inputDeps)
 		{
-			var job = new Job
+			inputDeps = new Job
 			{
-				Ecb                      = PostUpdateCommands.ToConcurrent(),
+				DamageEventList = m_DamageEventProvider.GetEntityDelayedList(),
 				CPayload = new ChunkPayload
 				{
 					HitColliderChunks   = HitColliderQuery.CreateArchetypeChunkArray(Allocator.TempJob),
 					EntityType          = GetArchetypeChunkEntityType(),
 					LocalToWorldType    = GetArchetypeChunkComponentType<LocalToWorld>(),
 					PhysicsColliderType = GetArchetypeChunkComponentType<PhysicsCollider>()
-				}
-			};
-			job.Run(this);
+				}	
+			}.ScheduleSingle(this, inputDeps);
+			
+			m_DamageEventProvider.AddJobHandleForProducer(inputDeps);
+
+			return inputDeps;
 		}
 	}
 }

@@ -45,8 +45,6 @@ namespace package.stormium.def.Kits.ProKit
                 ComponentType.ReadWrite<OpenCharacterController>(),
                 ComponentType.Exclude<DeactivateMovement>()
             );
-
-            m_Collisions = new List<CollisionInfo>();
         }
 
         protected override void OnUpdate()
