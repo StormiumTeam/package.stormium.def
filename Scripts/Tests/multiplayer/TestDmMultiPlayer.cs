@@ -1,8 +1,6 @@
 using System.Net;
-using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.shared;
 using Stormium.Default.GameModes;
-using StormiumShared.Core;
 using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -22,16 +20,16 @@ namespace Stormium.Default.Tests
         public string HostAddr = "127.0.0.1";
         public int    HostPort = 8590;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            ServerMgr = World.GetOrCreateManager<GameServerManager>();
-            AppEventSystem = World.GetOrCreateManager<AppEventSystem>(); 
+            ServerMgr = World.GetOrCreateSystem<GameServerManager>();
+            AppEventSystem = World.GetOrCreateSystem<AppEventSystem>(); 
 
             AppEventSystem.SubscribeToAll(this);
              
             Application.targetFrameRate = 150;
             
-            World.GetOrCreateManager<GameManager>().SetGameAs(GameType.Client);
+            World.GetOrCreateSystem<GameManager>().SetGameAs(GameType.Client);
 
             Bootstrap.register();
 
@@ -74,7 +72,7 @@ namespace Stormium.Default.Tests
 
         public void NativeOnGUI()
         {
-            var gameTime = GetSingleton<SingletonGameTime>();
+            var gameTime = GetSingleton<GameTimeComponent>();
             
             using (new GUILayout.VerticalScope())
             {
@@ -117,7 +115,7 @@ namespace Stormium.Default.Tests
                 if (!ServerMgr.ConnectToServer(targetEp))
                     Debug.LogError("Couldn't connect to a server. endpoint=" + targetEp);
                 
-                World.GetExistingManager<GameManager>().SetGameAs(GameType.Client);
+                World.GetExistingSystem<GameManager>().SetGameAs(GameType.Client);
             }
 
             if (GUILayout.Button("Create"))
@@ -133,11 +131,16 @@ namespace Stormium.Default.Tests
                     ComponentType.ReadWrite<EntityAuthority>()
                 );
                 
-                World.GetExistingManager<GameManager>().SetGameAs(GameType.Client | GameType.Server);
+                World.GetExistingSystem<GameManager>().SetGameAs(GameType.Client | GameType.Server);
 
 #if UNITY_EDITOR
                 EntityManager.SetName(GameModeEntity, "DeathMatch GameMode");
 #endif
+            }
+
+            if (GUILayout.Button("Free Resources"))
+            {
+                Resources.UnloadUnusedAssets();
             }
         }
 

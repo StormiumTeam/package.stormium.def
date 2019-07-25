@@ -4,6 +4,7 @@ using StandardAssets.Characters.Physics;
 using Stormium.Core;
 using Stormium.Default.Kits.ProKit;
 using StormiumTeam.GameBase;
+using StormiumTeam.GameBase.Components;
 using StormiumTeam.GameBase.Data;
 using Unity.Entities;
 using UnityEngine;
@@ -14,14 +15,14 @@ namespace package.stormium.def.Kits.ProKit
     [AlwaysUpdateSystem]
     public partial class ProKitBehaviorSystem : GameBaseSystem
     {
-        private ComponentGroup m_CharacterMovementGroup;
-        private PhysicQueryManager m_QueryManager;
+        private EntityQuery m_CharacterMovementAuthorityGroup;
+        private EntityQuery m_CharacterMovementPredictionGroup;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            base.OnCreateManager();
+            base.OnCreate();
 
-            m_CharacterMovementGroup = GetComponentGroup
+            m_CharacterMovementAuthorityGroup = GetEntityQuery
             (
                 ComponentType.ReadWrite<ProKitMovementSettings>(),
                 ComponentType.ReadWrite<ProKitMovementState>(),
@@ -30,11 +31,22 @@ namespace package.stormium.def.Kits.ProKit
                 ComponentType.ReadWrite<Velocity>(),
                 ComponentType.ReadWrite<OpenCharacterController>(),
                 ComponentType.ReadWrite<EntityAuthority>(),
+                ComponentType.ReadWrite<LivableHealth>(),
+                ComponentType.Exclude<DeactivateMovement>()
+            );
+            
+            m_CharacterMovementPredictionGroup = GetEntityQuery
+            (
+                ComponentType.ReadWrite<ProKitMovementSettings>(),
+                ComponentType.ReadWrite<ProKitMovementState>(),
+                ComponentType.ReadWrite<ProKitInputState>(),
+                ComponentType.ReadWrite<AimLookState>(),
+                ComponentType.ReadWrite<Velocity>(),
+                ComponentType.ReadWrite<OpenCharacterController>(),
                 ComponentType.Exclude<DeactivateMovement>()
             );
 
             m_Collisions = new List<CollisionInfo>();
-            m_QueryManager = World.GetOrCreateManager<PhysicQueryManager>();
         }
 
         protected override void OnUpdate()
@@ -51,33 +63,33 @@ namespace package.stormium.def.Kits.ProKit
 
         private void UpdateInputsFromOwners()
         {
-            ForEach((Entity entity, ref ProKitInputState inputState, ref AimLookState aimLook) =>
+            Entities.ForEach((Entity entity, ref ProKitInputState inputState, ref AimLookState aimLook) =>
             {
-                if (!EntityManager.HasComponent<OwnerState<PlayerDescription>>(entity))
+                if (!EntityManager.HasComponent<Relative<PlayerDescription>>(entity))
                     return;
 
-                var owner = EntityManager.GetComponentData<OwnerState<PlayerDescription>>(entity).Target;
-                if (!EntityManager.HasComponent<BasicUserCommand>(owner))
+                var owner = EntityManager.GetComponentData<Relative<PlayerDescription>>(entity).Target;
+                if (!EntityManager.HasComponent<GamePlayerUserCommand>(owner))
                     return;
 
-                var commands = EntityManager.GetComponentData<BasicUserCommand>(owner);
+                var commands = EntityManager.GetComponentData<GamePlayerUserCommand>(owner);
 
                 inputState.Movement = commands.Move;
-                inputState.QueueJump = Convert.ToByte(commands.Jump);
-                inputState.QueueDodge = Convert.ToByte(commands.Dodge);
+                inputState.QueueJump = Convert.ToByte(commands.QueueJump);
+                inputState.QueueDodge = Convert.ToByte(commands.QueueDodge);
                 aimLook.Aim         = commands.Look;
 
-                if (commands.TapJumpFrame == Time.frameCount) inputState.QueueJump = 2;
-                if (commands.TapDodgeFrame == Time.frameCount) inputState.QueueDodge = 2;
+                if (commands.IsJumping) inputState.QueueJump = 2;
+                if (commands.IsDodging) inputState.QueueDodge = 2;
             });
         }
 
         private void SimulateRotations()
         {
-            ForEach((OpenCharacterController controller, ref AimLookState aimLook) =>
+            Entities.With(m_CharacterMovementAuthorityGroup).ForEach((OpenCharacterController controller, ref AimLookState aimLook) =>
             {
                 controller.transform.rotation = Quaternion.Euler(0, aimLook.Aim.x, 0);
-            }, m_CharacterMovementGroup);
+            });
         }
     }
 }

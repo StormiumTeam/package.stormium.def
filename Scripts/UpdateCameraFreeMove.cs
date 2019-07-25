@@ -1,6 +1,8 @@
 using Stormium.Default.States;
-using StormiumShared.Core;
+using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
+using StormiumTeam.Shared.Gen;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -8,43 +10,48 @@ using UnityEngine;
 
 namespace Scripts
 {
+    [UpdateInGroup(typeof(PresentationSystemGroup))]
     public class UpdateCameraFreeMove : ComponentSystem
     {
-        private float m_Delta;
-        private float2 m_Move;
-        private float m_Jet;
-        private float2 m_Look;
+        private EntityQuery m_Query;
+
+        protected override void OnCreate()
+        {
+            m_Query = GetEntityQuery(typeof(LocalCameraFreeMove), typeof(Translation), typeof(Rotation));
+        }
 
         protected override void OnUpdate()
         {
-            m_Delta = GetSingleton<SingletonGameTime>().DeltaTime;
+            var deltaTime = GetSingleton<GameTimeComponent>().DeltaTime;
 
             var nMove = math.normalizesafe(new float2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")));
 
             if (Input.GetKey(KeyCode.LeftShift))
                 nMove *= 2.0f;
-                
-            var nJet  = 0.0f;
+
+            var nJet = 0.0f;
             if (Input.GetKey(KeyCode.Space))
                 nJet = 1.0f;
             if (Input.GetKey(KeyCode.LeftControl))
                 nJet = -1.0f;
 
-            m_Move = math.lerp(m_Move, nMove, m_Delta * 12.5f);
-            m_Jet  = math.lerp(m_Jet, nJet, m_Delta * 20f);
+            LocalCameraFreeMove freeMove    = default;
+            Translation         translation = default;
+            Rotation            rotation    = default;
 
-            m_Look = GetNewAimLook(m_Look);
-
-            ForEach((Entity entity, ref LocalCameraFreeMove freeMove, ref Translation translation, ref Rotation rotation) =>
+            foreach (var (i, entity) in this.ToEnumerator_DDD(m_Query, ref freeMove, ref translation, ref rotation))
             {
-                var horizontal = m_Move.x * freeMove.Intensity * m_Delta;
-                var vertical   = m_Move.y * freeMove.Intensity * m_Delta;
-                var look       = m_Look;
+                var move = math.lerp(freeMove.PreviousMove, nMove, deltaTime * 12.5f);
+                var jet  = math.lerp(freeMove.PreviousJet, nJet, deltaTime * 20f);
 
-                rotation.Value =  Quaternion.Euler(-look.y, look.x, 0.0f);
+                var horizontal = move.x * freeMove.Intensity * deltaTime;
+                var vertical   = move.y * freeMove.Intensity * deltaTime;
+                var look       = GetNewAimLook(freeMove.PreviousAimLook);
+
+                rotation.Value    =  Quaternion.Euler(-look.y, look.x, 0.0f);
                 translation.Value += math.mul(rotation.Value, new Vector3(horizontal, 0, vertical));
 
-                translation.Value.y += m_Jet * (freeMove.Intensity * 0.75f) * m_Delta;
+                translation.Value.y += jet * (freeMove.Intensity * 0.75f) * deltaTime;
 
                 if (EntityManager.HasComponent<CameraModifierData>(entity))
                 {
@@ -55,7 +62,7 @@ namespace Scripts
                         Rotation    = rotation.Value
                     });
                 }
-            });
+            }
         }
 
         private float2 GetNewAimLook(float2 previous)
@@ -63,7 +70,7 @@ namespace Scripts
             var input = new float2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")) * 1.5f;
                     
             var newRotation = previous + input;
-            newRotation.x = newRotation.x % 360;
+            newRotation.x %= 360;
             newRotation.y = Mathf.Clamp(newRotation.y, -89f, 89f);
 
             return newRotation;

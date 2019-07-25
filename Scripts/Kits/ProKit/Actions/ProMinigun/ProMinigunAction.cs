@@ -1,9 +1,6 @@
 using System;
 using package.StormiumTeam.GameBase;
 using Stormium.Core;
-using Stormium.Default.Kits.ProKit;
-using StormiumShared.Core;
-using StormiumShared.Core.Networking;
 using StormiumTeam.GameBase;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -24,13 +21,14 @@ namespace Stormium.Default.Actions.ProMinigun
 
 		public struct Settings : IComponentData
 		{
-			public float StartRadius, EndRadius; // in meters
-			public float TransitionTime;         // in seconds	
+			public float StartRadius,   EndRadius; // in meters
+			public int   StartCooldown, EndCooldown;
+			public float TransitionTime; // in seconds	
 		}
 	}
 
-	[UpdateInGroup(typeof(ProActionSystemGroup))]
-	public class ProMinigunSystem : ActionBaseSystem<ProMinigunSystem.CreateProjectileRequest>
+	[DisableAutoCreation]
+	public class ProMinigunActionSystem : ActionBaseSystem<ProMinigunActionSystem.CreateProjectileRequest>
 	{
 		[Serializable]
 		public struct CreateProjectileRequest
@@ -40,24 +38,24 @@ namespace Stormium.Default.Actions.ProMinigun
 			public Entity action;
 		}
 
-		private ComponentGroup     m_Group;
+		private EntityQuery                  m_Group;
 		private ProMinigunProjectileProvider m_ProjectileProvider;
 
-		protected override void OnCreateManager()
+		protected override void OnCreate()
 		{
-			base.OnCreateManager();
+			base.OnCreate();
 
-			m_Group = GetComponentGroup
+			m_Group = GetEntityQuery
 			(
 				ComponentType.ReadWrite<ProMinigunAction.Settings>(),
 				ComponentType.ReadWrite<ProMinigunAction.PredictedState>(),
 				ComponentType.ReadWrite<ActionAmmo>(),
 				ComponentType.ReadWrite<ActionCooldown>(),
 				ComponentType.ReadWrite<StActionSlotInput>(),
-				ComponentType.ReadWrite<OwnerState<LivableDescription>>(),
+				ComponentType.ReadWrite<Owner>(),
 				ComponentType.ReadWrite<EntityAuthority>()
 			);
-			m_ProjectileProvider = World.GetOrCreateManager<ProMinigunProjectileProvider>();
+			m_ProjectileProvider = World.GetOrCreateSystem<ProMinigunProjectileProvider>();
 		}
 
 		protected override unsafe void OnActionUpdate()
@@ -68,7 +66,7 @@ namespace Stormium.Default.Actions.ProMinigun
 			using (var ammoArray = m_Group.ToComponentDataArray<ActionAmmo>(Allocator.TempJob))
 			using (var cooldownArray = m_Group.ToComponentDataArray<ActionCooldown>(Allocator.TempJob))
 			using (var slotInputArray = m_Group.ToComponentDataArray<StActionSlotInput>(Allocator.TempJob))
-			using (var ownerArray = m_Group.ToComponentDataArray<OwnerState<LivableDescription>>(Allocator.TempJob))
+			using (var ownerArray = m_Group.ToComponentDataArray<Owner>(Allocator.TempJob))
 			{
 				for (var i = 0; i != entityArray.Length; i++)
 				{
@@ -88,21 +86,38 @@ namespace Stormium.Default.Actions.ProMinigun
 		protected void Operate(in  Entity                          entity,
 		                       in  ProMinigunAction.Settings       settings,
 		                       ref ProMinigunAction.PredictedState state,
-		                       ref ActionAmmo                    ammo,
-		                       ref ActionCooldown                cooldown,
+		                       ref ActionAmmo                      ammo,
+		                       ref ActionCooldown                  cooldown,
 		                       in  StActionSlotInput               input,
-		                       in  OwnerState<LivableDescription>  owner)
+		                       in  Owner                           owner)
 		{
 			var spin = input.IsActive;
-			var dt = GetSingleton<SingletonGameTime>().DeltaTime;
+			var dt   = GetSingleton<GameTimeComponent>().DeltaTime;
 
 			state.InShootingDuration = max(state.InShootingDuration + (spin ? dt : -dt), 0);
 			if (!spin)
-				state.InShootingDuration = min(state.InShootingDuration, 1);
-			
-			if (spin && ammo.Value >= ammo.Usage && cooldown.CooldownFinished(Tick))
 			{
-				ammo.ModifyAmmo(ammo.Value - ammo.Usage);
+				state.InShootingDuration = min(state.InShootingDuration, 1);
+				state.IsShooting         = 0;
+
+				ammo.IncreaseFromDelta(TickDelta);
+			}
+			else
+			{
+				// unlike other actions, we only remove a delta tick from the ammo value
+				ammo.ModifyAmmo(ammo.Value - TickDelta);
+				if (state.IsShooting == 0 && ammo.Value >= ammo.Usage)
+				{
+					state.IsShooting = 1;
+				}
+
+				if (ammo.Value <= 0)
+					state.IsShooting = 0;
+			}
+
+			cooldown.Cooldown = (int) lerp(settings.StartCooldown, settings.EndCooldown, clamp(state.InShootingDuration / settings.TransitionTime, 0, 1));
+			if (state.IsShooting == 1 && cooldown.CooldownFinished(Tick))
+			{
 				cooldown.StartTick = Tick;
 
 				var angle  = Mathf.Deg2Rad * (state.InShootingDuration % 1 * 360);
@@ -111,24 +126,24 @@ namespace Stormium.Default.Actions.ProMinigun
 
 				GetPosition(in owner.Target, out var position);
 				GetDirectionWithAimDelta(in owner.Target, in offset, out var direction);
-				
+
 				Debug.DrawRay(position, direction * 32f, Color.black, 1f);
+				Debug.DrawRay(position, direction * 16f, Color.white, 0.1f);
 
 				SpawnRequests.Add(new CreateProjectileRequest
 				{
 					position  = position,
 					direction = direction * 200f,
-					action = entity
+					action    = entity
 				});
 			}
-
-			ammo.IncreaseFromDelta(TickDelta);
 		}
 
 		protected override void FinalizeSpawnRequests()
 		{
-			foreach (var request in SpawnRequests)
+			for (var i = 0; i != SpawnRequests.Length; i++)
 			{
+				var request = SpawnRequests[i];
 				m_ProjectileProvider.SpawnLocal(request.position, request.direction, request.action);
 			}
 		}

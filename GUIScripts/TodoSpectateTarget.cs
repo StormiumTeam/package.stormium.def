@@ -1,11 +1,7 @@
-using package.stormiumteam.networking;
-using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
 using StandardAssets.Characters.Physics;
-using Stormium.Core.Networking;
 using Stormium.Default.States;
-using StormiumShared.Core.Networking;
 using StormiumTeam.GameBase;
 using Unity.Collections;
 using Unity.Entities;
@@ -13,17 +9,18 @@ using UnityEngine;
 
 namespace GUIScripts
 {
-	public class TodoSpectateTarget : GameBaseSyncMessageSystem, INativeEventOnGUI
+	// todo: use rpc?
+	/*public class TodoSpectateTarget : GameBaseSyncMessageSystem, INativeEventOnGUI
 	{
 		public PatternResult SetSpectatorRequestId;
 		
-		protected override void OnCreateManager()
+		protected override void OnCreate()
 		{
-			base.OnCreateManager();
+			base.OnCreate();
 
 			SetSpectatorRequestId = AddMessage(OnSetSpectatorRequest);
 			
-			World.GetOrCreateManager<AppEventSystem>().SubscribeToAll(this);
+			World.GetOrCreateSystem<AppEventSystem>().SubscribeToAll(this);
 		}
 
 		private void OnSetSpectatorRequest(NetworkInstanceData networkInstance, Entity client, DataBufferReader data)
@@ -37,7 +34,7 @@ namespace GUIScripts
 
 		public void NativeOnGUI()
 		{
-			var snapshot = World.GetExistingManager<NetworkSnapshotManager>().CurrentSnapshot;
+			var snapshot = World.GetExistingSystem<NetworkSnapshotManager>().CurrentSnapshot;
 
 			m_CurrentGamePlayer = GetFirstSelfGamePlayer();
 			
@@ -49,7 +46,7 @@ namespace GUIScripts
 			using (new GUILayout.VerticalScope())
 			{
 				// Only spectate entity with a camera modifier (and that can generate a snapshot)
-				ForEach((Entity entity, OpenCharacterController controller) =>
+				Entities.ForEach((Entity entity, OpenCharacterController controller) =>
 				{
 					if (!EntityManager.HasComponent<GenerateEntitySnapshot>(entity))
 						return;
@@ -74,5 +71,5 @@ namespace GUIScripts
 			}
 			GUILayout.Space(5);
 		}
-	}
+	}*/
 }

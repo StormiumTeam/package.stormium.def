@@ -1,12 +1,9 @@
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
-using StormiumShared.Core.Networking;
 using StormiumTeam.GameBase;
-using StormiumTeam.GameBase.Data;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
-using Unity.Mathematics;
 
 namespace Scripts.Bumpers
 {
@@ -15,8 +12,13 @@ namespace Scripts.Bumpers
 
 	}
 
-	public class LaunchPadBumpEventProvider : SystemProvider
+	public class LaunchPadBumpEventProvider : BaseProviderBatch<LaunchPadBumpEventProvider.Create>
 	{
+		public struct Create
+		{
+			public TargetBumpEvent data;
+		}
+
 		private struct SerializeCollectionJob : IJob
 		{
 			public int ModelId;
@@ -88,7 +90,7 @@ namespace Scripts.Bumpers
 			}
 		}
 
-		public override void GetComponents(out ComponentType[] entityComponents, out ComponentType[] excludedComponents)
+		public override void GetComponents(out ComponentType[] entityComponents)
 		{
 			entityComponents = new[]
 			{
@@ -98,57 +100,11 @@ namespace Scripts.Bumpers
 				ComponentType.ReadWrite<ExcludeFromDataStreamer>(),
 				ComponentType.ReadWrite<GenerateEntitySnapshot>(),
 			};
-			excludedComponents = null;
 		}
 
-		public override void SerializeCollection(ref DataBufferWriter data, SnapshotReceiver receiver, SnapshotRuntime snapshotRuntime)
+		public override void SetEntityData(Entity entity, Create data)
 		{
-			new SerializeCollectionJob
-			{
-				ModelId = GetModelIdent().Id,
-
-				Runtime = snapshotRuntime,
-				Buffer  = data,
-
-				BumpEventFromEntity = GetComponentDataFromEntity<TargetBumpEvent>()
-			}.Run();
-		}
-
-		public override void DeserializeCollection(ref DataBufferReader data, SnapshotSender sender, SnapshotRuntime snapshotRuntime)
-		{
-			using (var ecb = new EntityCommandBuffer(Allocator.TempJob))
-			{
-				new DeserializeCollectionJob
-				{
-					ModelId = GetModelIdent().Id,
-
-					Runtime         = snapshotRuntime,
-					BufferReference = UnsafeAllocation.From(ref data),
-
-					BumpEventFromEntity = GetComponentDataFromEntity<TargetBumpEvent>(),
-
-					Ecb = ecb
-				};
-
-				ecb.Playback(EntityManager);
-			}
-		}
-
-		protected override Entity SpawnEntity(Entity origin, SnapshotRuntime snapshotRuntime)
-		{
-			return EntityManager.CreateEntity(EntityComponents);
-		}
-
-		public override Entity SpawnLocalEntityDelayed(EntityCommandBuffer entityCommandBuffer)
-		{
-			var e = entityCommandBuffer.CreateEntity(EntityArchetype);
-			entityCommandBuffer.SetComponent(e, GetModelIdent());
-			return e;
-		}
-
-		protected override void DestroyEntity(Entity worldEntity)
-		{
-			EntityManager.DestroyEntity(worldEntity);
+			EntityManager.SetComponentData(entity, data.data);
 		}
 	}
 }

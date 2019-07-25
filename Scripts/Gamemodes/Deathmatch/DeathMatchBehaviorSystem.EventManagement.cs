@@ -1,9 +1,7 @@
 using package.stormium.def.Kits.ProKit;
-using Stormium.Default.States;
+using Runtime.BaseSystems;
 using StormiumTeam.GameBase;
-using StormiumTeam.GameBase.Data;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace Stormium.Default.GameModes
 {
@@ -11,26 +9,10 @@ namespace Stormium.Default.GameModes
 	{
 		public void ManageEvents()
 		{
-			ForEach((ref GameEvent gameEvent, ref TargetDamageEvent damageEvent) =>
-			{
-				Debug.Log($"TargetDamageEvent({damageEvent.Victim})");
-				
-				if (!EntityManager.HasComponent<HealthState>(damageEvent.Victim))
-					return;
-				if (EntityManager.HasComponent<OwnerState<LivableDescription>>(damageEvent.Shooter))
-				{
-					var livable = EntityManager.GetComponentData<OwnerState<LivableDescription>>(damageEvent.Shooter);
-					if (livable.Target == damageEvent.Victim) // no self damage for now
-						damageEvent.DmgValue = (int)(damageEvent.DmgValue / 2.5f);
-				}
-
-				var healthState = EntityManager.GetComponentData<HealthState>(damageEvent.Victim);
-				healthState.Health -= damageEvent.DmgValue;
-				
-				EntityManager.SetComponentData(damageEvent.Victim, healthState);
-			});
+			var ruleGroup = World.GetExistingSystem<GameEventRuleSystemGroup>();
+			ruleGroup.Process();
 			
-			ForEach((ref GameEvent gameEvent, ref TargetBumpEvent explosionEvent) =>
+			Entities.ForEach((ref GameEvent gameEvent, ref TargetBumpEvent explosionEvent) =>
 			{
 				if (!EntityManager.HasComponent<Velocity>(explosionEvent.Victim))
 					return;
@@ -46,7 +28,7 @@ namespace Stormium.Default.GameModes
 				{
 					var movementState = EntityManager.GetComponentData<ProKitMovementState>(explosionEvent.Victim);
 
-					movementState.ForceUnground = 1;
+					movementState.ForceUnground = true;
 					
 					EntityManager.SetComponentData<ProKitMovementState>(explosionEvent.Victim, movementState);
 				}

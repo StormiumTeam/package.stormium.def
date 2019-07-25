@@ -2,7 +2,7 @@ using StormiumTeam.GameBase;
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.StormiumTeam.GameBase;
 using Stormium.Core;
-using StormiumShared.Core.Networking;
+using Stormium.Default.Kits.ProKit;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -13,16 +13,17 @@ namespace Scripts.Actions.ProRailgun
 	{
 		public override void GetComponents(out ComponentType[] entityComponents, out ComponentType[] excludedComponents)
 		{
-			entityComponents = new []
+			entityComponents = new[]
 			{
-				ComponentType.ReadWrite<ProjectileDescription>(), 
-				ComponentType.ReadWrite<ProProjectileData>(), 
-				ComponentType.ReadWrite<ProRailgunProjectile>(), 
+				ComponentType.ReadWrite<ProjectileDescription>(),
+				ComponentType.ReadWrite<ProProjectile.Settings>(),
+				ComponentType.ReadWrite<ProProjectile.PredictedState>(),
+				ComponentType.ReadWrite<ProRailgunProjectile>(),
 				ComponentType.ReadWrite<Translation>(),
 				ComponentType.ReadWrite<Rotation>(),
 				ComponentType.ReadWrite<LocalToWorld>(),
 				ComponentType.ReadWrite<TransformState>(),
-				ComponentType.ReadWrite<TransformStateDirection>(), 
+				ComponentType.ReadWrite<TransformStateDirection>(),
 			};
 			excludedComponents = null;
 		}
@@ -34,7 +35,7 @@ namespace Scripts.Actions.ProRailgun
 				if (entity.ModelId != GetModelIdent().Id) continue;
 
 				var projectile = EntityManager.GetComponentData<ProRailgunProjectile>(entity.Source);
-				var transform = EntityManager.GetComponentData<TransformState>(entity.Source);
+				var transform  = EntityManager.GetComponentData<TransformState>(entity.Source);
 
 				data.WriteValue(projectile);
 				data.WriteValue(transform.Position);
@@ -58,7 +59,7 @@ namespace Scripts.Actions.ProRailgun
 		protected override Entity SpawnEntity(Entity origin, SnapshotRuntime snapshotRuntime)
 		{
 			var entity = EntityManager.CreateEntity(EntityComponents);
-			
+
 			var cf = snapshotRuntime.Header.Sender.Flags;
 			EntityManager.SetComponentData(entity, new TransformStateDirection(cf == SnapshotFlags.Local ? Dir.ConvertToState : Dir.ConvertFromState));
 
@@ -69,18 +70,18 @@ namespace Scripts.Actions.ProRailgun
 		{
 			EntityManager.DestroyEntity(worldEntity);
 		}
-		
+
 		public Entity SpawnLocal(float3 position, float3 direction, ProRailgunProjectile settings)
 		{
 			var entity = SpawnLocal();
 
 			settings.Direction = direction;
-			
-			EntityManager.SetComponentData(entity, new Translation {Value  = position});
-			EntityManager.SetComponentData(entity, new Rotation {Value = quaternion.LookRotationSafe(direction, new float3(0, 1, 0))});
+
+			EntityManager.SetComponentData(entity, new Translation {Value = position});
+			EntityManager.SetComponentData(entity, new Rotation {Value    = quaternion.LookRotationSafe(direction, new float3(0, 1, 0))});
 			EntityManager.SetComponentData(entity, settings);
-			EntityManager.SetComponentData(entity, new ProProjectileData{Phase = StandardProjectilePhase.Active});
-			
+			EntityManager.SetComponentData(entity, new ProProjectile.PredictedState {phase = StandardProjectilePhase.Active});
+
 			return entity;
 		}
 	}

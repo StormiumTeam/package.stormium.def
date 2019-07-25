@@ -4,8 +4,8 @@ using package.StormiumTeam.GameBase;
 using Stormium.Default.Actions.ProMinigun;
 using Stormium.Default.States;
 using Stormium.Default.Tests;
-using StormiumShared.Core.Networking;
 using StormiumTeam.GameBase;
+using StormiumTeam.GameBase.Components;
 using StormiumTeam.GameBase.Data;
 using Unity.Collections;
 using Unity.Entities;
@@ -17,23 +17,23 @@ namespace Stormium.Default.GameModes
 {
     public partial class DeathMatchBehaviorSystem
     {
-        public ComponentGroup CreateCharacterForPlayerGroup;
-        public ComponentGroup SpawnGroup;
+        public EntityQuery CreateCharacterForPlayerGroup;
+        public EntityQuery SpawnGroup;
         public ModelIdent     CharacterModel;
 
         public void Init_CharacterManagement()
         {
-            CreateCharacterForPlayerGroup = GetComponentGroup
+            CreateCharacterForPlayerGroup = GetEntityQuery
             (
                 ComponentType.ReadWrite<DeathMatchPlayer>()
             );
 
-            SpawnGroup = GetComponentGroup
+            SpawnGroup = GetEntityQuery
             (
                 ComponentType.ReadWrite<DeathMatchSpawn>()
             );
 
-            CharacterModel = World.GetOrCreateManager<TestCharacterProvider>().GetModelIdent();
+            CharacterModel = World.GetOrCreateSystem<TestCharacterProvider>().GetModelIdent();
         }
 
         public void CreateCharacters()
@@ -69,29 +69,37 @@ namespace Stormium.Default.GameModes
 
         public void ManageCharacters()
         {
-            ForEach((Entity entity, Transform transform, ref DeathMatchCharacter character, ref HealthState healthState, ref Velocity velocity) =>
+            Entities.ForEach((Entity entity, Transform transform, ref DeathMatchCharacter character, ref LivableHealth health, ref Velocity velocity) =>
             {
                 // Unspawn him
-                if (healthState.Health <= 0 && character.NextRespawn == default)
+                if (health.Value <= 0 && character.NextRespawn == default)
                 {
-                    healthState.Health = 0;
                     velocity.Value = float3.zero;
-                    character.NextRespawn = Tick + 2500;
+                    character.NextRespawn = GameTime.Tick + GameTime.Convert(2.5f);
                 }
 
-                if (character.NextRespawn != default && character.NextRespawn < Tick)
+                if (character.NextRespawn != default && character.NextRespawn < GameTime.Tick)
                 {
+                    var tempSpawns = SpawnGroup.ToEntityArray(Allocator.TempJob);
+                    var spawn = EntityManager.GetComponentObject<DeathMatchSpawn>(tempSpawns[Random.Range(0, tempSpawns.Length)]);
+                    
+                    tempSpawns.Dispose();
+                    
                     character.NextRespawn = default;
-                    healthState.Health = healthState.MaxHealth;
-                    transform.position = SpawnGroup.GetComponentArray<DeathMatchSpawn>()[Random.Range(0, SpawnGroup.CalculateLength())].transform.position;
+                    transform.position = spawn.transform.position;
+
+                    var healthEvent = PostUpdateCommands.CreateEntity();
+                    
+                    PostUpdateCommands.AddComponent(healthEvent, new ModifyHealthEvent(ModifyHealthType.SetMax, 0, entity));
                 }
             });
         }
 
         private void SpawnCharacter(Entity playerEntity)
         {
-            var chrEntity = GameMgr.SpawnLocal(CharacterModel);
-
+            //var chrEntity = GameMgr.SpawnLocal(CharacterModel);
+            var chrEntity = World.GetExistingSystem<TestCharacterProvider>().SpawnLocal();
+            
             EntityManager.SetComponentData(chrEntity, new ProKitMovementSettings
             {
                 GroundSettings = SrtGroundSettings.NewBase(),
@@ -100,35 +108,50 @@ namespace Stormium.Default.GameModes
 
             EntityManager.AddBuffer<ActionContainer>(chrEntity);
             EntityManager.AddComponentData(chrEntity, new DeathMatchCharacter(playerEntity));
-            EntityManager.AddComponentData(chrEntity, new HealthState(100, 100));
             EntityManager.AddComponentData(chrEntity, new DestroyChainReaction(playerEntity));
             EntityManager.SetComponentData(playerEntity, new DeathMatchPlayer(chrEntity));
             
             EntityManager.ReplaceOwnerData(chrEntity, playerEntity);
 
-            /*var rocketAction = World.GetExistingManager<ProRocketActionProvider>().SpawnLocal(chrEntity, 0);
-            var detonateAction = World.GetExistingManager<ProRocketDetonateActionProvider>().SpawnLocal(chrEntity, playerEntity, 1);
+            using (var healthEntities = new NativeList<Entity>())
+            {
+                var data = new DefaultHealthData.CreateInstance
+                {
+                    value = 100,
+                    max   = 100,
+                    owner = chrEntity
+                };
+                World.GetExistingSystem<DefaultHealthData.InstanceProvider>().SpawnLocalEntityWithArguments(data, healthEntities);
+            }
+
+            /*var rocketAction = World.GetExistingSystem<ProRocketActionProvider>().SpawnLocal(chrEntity, 0);
+            var detonateAction = World.GetExistingSystem<ProRocketDetonateActionProvider>().SpawnLocal(chrEntity, playerEntity, 1);
             
             EntityManager.AddComponentData(rocketAction, new DestroyChainReaction(chrEntity));
             EntityManager.AddComponentData(detonateAction, new DestroyChainReaction(chrEntity));*/
 
-            /*var railgunAction = World.GetExistingManager<ProRailgunActionProvider>().SpawnLocal(chrEntity, new ProRailgunAction{ScanRadius = 0.1f}, 0);
+            /*var railgunAction = World.GetExistingSystem<ProRailgunActionProvider>().SpawnLocal(chrEntity, new ProRailgunAction{ScanRadius = 0.1f}, 0);
             
             EntityManager.AddComponentData(railgunAction, new DestroyChainReaction(chrEntity));*/
 
-            var minigunSettings = new ProMinigunAction.Settings {EndRadius = 0.5f, StartRadius = 0.01f, TransitionTime = 1f};
-            var minigunAction = World.GetExistingManager<ProMinigunActionProvider>().SpawnLocal(chrEntity, minigunSettings, 0);
+            var minigunSettings = new ProMinigunAction.Settings {EndRadius = 0.75f, StartRadius = 0.25f, StartCooldown = 500, EndCooldown = 50, TransitionTime = 2f};
+            var minigunAction = World.GetExistingSystem<ProMinigunActionProvider>().SpawnLocal(chrEntity, minigunSettings, 0);
             
             EntityManager.AddComponentData(minigunAction, new DestroyChainReaction(chrEntity));
 
             // Force camera
             var camera = EntityManager.GetComponentData<ServerCameraState>(playerEntity);
-            camera.Target = chrEntity;
+            camera.Data.Target = chrEntity;
             EntityManager.SetComponentData(playerEntity, camera);
 
             var transform = EntityManager.GetComponentObject<Transform>(chrEntity);
+            
+            var tempSpawns = SpawnGroup.ToEntityArray(Allocator.TempJob);
+            var spawn      = EntityManager.GetComponentObject<DeathMatchSpawn>(tempSpawns[Random.Range(0, tempSpawns.Length)]);
+                    
+            tempSpawns.Dispose();
 
-            transform.position = SpawnGroup.GetComponentArray<DeathMatchSpawn>()[Random.Range(0, SpawnGroup.CalculateLength())].transform.position;
+            transform.position = spawn.transform.position;
         }
     }
 }

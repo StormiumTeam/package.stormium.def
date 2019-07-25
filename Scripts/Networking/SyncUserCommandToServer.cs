@@ -6,9 +6,9 @@ namespace Scripts.Networking
     {
         private GameManager m_GameManager;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            m_GameManager = World.GetOrCreateManager<GameManager>();
+            m_GameManager = World.GetOrCreateSystem<GameManager>();
         }
 
         protected override void OnUpdate()

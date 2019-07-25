@@ -1,17 +1,23 @@
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
-using StormiumShared.Core.Networking;
 using StormiumTeam.GameBase;
-using StormiumTeam.GameBase.Data;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
-using Unity.Mathematics;
 
-namespace Scripts.Provider
+namespace Stormium.Default.Kits.ProKit
 {
-	public class ProProjectileExplosionEventProvider : SystemProvider
+	public class ProProjectileExplosionEventProvider : SystemProvider<ProProjectileExplosionEventProvider.CreateDelayedData>
 	{
+		public struct CreateDelayedData
+		{
+			public bool            HasBumpEvent;
+			public TargetBumpEvent BumpEvent;
+
+			public bool              HasDamageEvent;
+			public TargetDamageEvent DamageEvent;
+		}
+
 		struct SerializeCollectionJob : IJob
 		{
 			public int ModelId;
@@ -118,22 +124,6 @@ namespace Scripts.Provider
 			excludedComponents = null;
 		}
 
-		private EntityArchetype m_SpawnArchetype;
-
-		protected override void OnCreateManager()
-		{
-			base.OnCreateManager();
-
-			m_SpawnArchetype = EntityManager.CreateArchetype
-			(
-				typeof(ModelIdent),
-				typeof(GameEvent),
-				typeof(ExcludeFromDataStreamer),
-				typeof(EntitySnapshotManualDestroy),
-				typeof(GenerateEntitySnapshot)
-			);
-		}
-
 		public override void SerializeCollection(ref DataBufferWriter data, SnapshotReceiver receiver, SnapshotRuntime snapshotRuntime)
 		{
 			new SerializeCollectionJob
@@ -165,21 +155,22 @@ namespace Scripts.Provider
 			}
 		}
 
-		protected override Entity SpawnEntity(Entity origin, SnapshotRuntime snapshotRuntime)
+		public override void SpawnLocalEntityWithArguments(CreateDelayedData data, NativeList<Entity> outputEntities)
 		{
-			return EntityManager.CreateEntity(m_SpawnArchetype);
+			var e = EntityManager.CreateEntity(EntityArchetype);
+			if (data.HasBumpEvent)
+				EntityManager.AddComponentData(e, data.BumpEvent);
+			if (data.HasDamageEvent)
+				EntityManager.AddComponentData(e, data.DamageEvent);
+			
+			outputEntities.Add(e);
 		}
 
 		public override Entity SpawnLocalEntityDelayed(EntityCommandBuffer entityCommandBuffer)
 		{
-			var e = entityCommandBuffer.CreateEntity(m_SpawnArchetype);
+			var e = entityCommandBuffer.CreateEntity(EntityArchetype);
 			entityCommandBuffer.SetComponent(e, GetModelIdent());
 			return e;
-		}
-
-		protected override void DestroyEntity(Entity worldEntity)
-		{
-			EntityManager.DestroyEntity(worldEntity);
 		}
 	}
 }

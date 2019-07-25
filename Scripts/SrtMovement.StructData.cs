@@ -59,37 +59,39 @@ namespace package.stormium.def
                 FrictionMin = 0.25f,
                 FrictionMax = 1f,
 
-                SurfaceFriction = 50f,
+                SurfaceFriction        = 50f,
                 DecayBaseSpeedFriction = 8.5f,
 
                 Acceleration   = 75f,
                 Deacceleration = 17.5f,
                 BaseSpeed      = 8f,
-                SprintSpeed    = 12f,
+                SprintSpeed    = 11f,
             };
         }
-    }
-    
+    } 
+
     public struct SrtAerialSettings
     {
         /// <summary>
         ///  The acceleration speed (Recommanded value: 14f)
         /// </summary>
         public float Acceleration;
+
         /// <summary>
         /// The force power [0-1] of the acceleration provoked by the Y axis (Recommanded value: 0.25f)
         /// </summary>
         public float AccelerationByHighsForce;
-        
+
         /// <summary>
         /// The base speed (Recommanded value: 9f)
         /// </summary>
         public float BaseSpeed;
+
         /// <summary>
         /// The force of the air control (Recommanded value: 12.5f)
         /// </summary>
         public float Control;
-        
+
         public static SrtAerialSettings NewBase()
         {
             return new SrtAerialSettings
@@ -101,4 +103,4 @@ namespace package.stormium.def
             };
         }
     }
-}
+} 

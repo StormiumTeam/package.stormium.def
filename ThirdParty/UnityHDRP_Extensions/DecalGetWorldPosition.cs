@@ -1,5 +1,5 @@
 using UnityEngine;
-using UnityEngine.Experimental.Rendering.HDPipeline;
+using UnityEngine.Rendering.HighDefinition;
 
 namespace ThirdParty.UnityHDRP_Extensions
 {
@@ -9,7 +9,7 @@ namespace ThirdParty.UnityHDRP_Extensions
         private Material m_Instance;
         private int m_PositionNameId;
         
-        public DecalProjectorComponent DecalProjector;
+        public DecalProjector DecalProjector;
         public Material Material;
 
         void OnEnable()
@@ -17,7 +17,7 @@ namespace ThirdParty.UnityHDRP_Extensions
             if (!RegenInstance())
                 return;
             
-            DecalProjector.m_Material = m_Instance;
+            DecalProjector.material = m_Instance;
         }
 
         void OnDisable()
@@ -35,7 +35,7 @@ namespace ThirdParty.UnityHDRP_Extensions
             if (!RegenInstance())
                 return;
 
-            DecalProjector.m_Material = m_Instance;
+            DecalProjector.material = m_Instance;
         }
 
         bool RegenInstance()

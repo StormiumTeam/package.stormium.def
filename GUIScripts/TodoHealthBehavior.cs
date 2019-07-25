@@ -1,5 +1,6 @@
 using Stormium.Default.States;
 using StormiumTeam.GameBase;
+using StormiumTeam.GameBase.Components;
 using TMPro;
 using Unity.Entities;
 using UnityEngine;
@@ -15,17 +16,17 @@ namespace GUIScripts
 	public class TodoHealthBehaviorSystem : GameBaseSystem
 	{
 		private Entity         m_CameraTarget;
-		private ComponentGroup m_CharacterGroup;
+		private EntityQuery m_CharacterGroup;
 
-		protected override void OnCreateManager()
+		protected override void OnCreate()
 		{
-			base.OnCreateManager();
+			base.OnCreate();
 
-			m_CharacterGroup = GetComponentGroup
+			m_CharacterGroup = GetEntityQuery
 			(
 				ComponentType.ReadWrite<CharacterDescription>(),
-				ComponentType.ReadWrite<HealthState>(),
-				ComponentType.ReadWrite<OwnerState<PlayerDescription>>()
+				ComponentType.ReadWrite<LivableHealth>(),
+				ComponentType.ReadWrite<Relative<PlayerDescription>>()
 			);
 		}
 
@@ -39,17 +40,17 @@ namespace GUIScripts
 				return;
 
 			m_CameraTarget = EntityManager.GetComponentData<ServerCameraState>(gamePlayer).Target;
-			if (!EntityManager.HasComponent<HealthState>(m_CameraTarget))
+			if (!EntityManager.HasComponent<LivableHealth>(m_CameraTarget))
 				return;
 
-			ForEach((TodoHealthBehavior healthBehavior) =>
+			Entities.ForEach((TodoHealthBehavior healthBehavior) =>
 			{
-				var health = EntityManager.GetComponentData<HealthState>(m_CameraTarget);
+				var health = EntityManager.GetComponentData<LivableHealth>(m_CameraTarget);
 
-				if (health.Health != healthBehavior.CurrHealth)
+				if (health.Value != healthBehavior.CurrHealth)
 				{
-					healthBehavior.CurrHealth      = health.Health;
-					healthBehavior.HealthText.text = health.Health.ToString();
+					healthBehavior.CurrHealth      = health.Value;
+					healthBehavior.HealthText.text = health.Value.ToString();
 				}
 			});
 		}

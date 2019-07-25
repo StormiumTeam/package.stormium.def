@@ -4,6 +4,7 @@
         "Unity.Addressables",
         "Unity.ResourceManager",
         "Unity.RenderPipelines.HighDefinition.Runtime",
+        "Unity.VisualEffectGraph.Runtime",
         "package.guerro.shared",
         "package.stormiumteam.gamebase",
         "package.stormium.core",
@@ -18,7 +19,9 @@
         "Unity.Collections",
         "Unity.Jobs",
         "Unity.TextMeshPro",
-        "Unity.Burst"
+        "Unity.Physics",
+        "Unity.Burst",
+        "Unity.ugui"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using StormiumTeam.GameBase;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -63,27 +64,29 @@ namespace Stormium.Default.NexG
 		}
 	}
 
-	[ExecuteAlways, AlwaysUpdateSystem]
+	[AlwaysUpdateSystem]
 	public class NexG_ChatBoxSystem : GameBaseSystem
 	{
-		private ComponentGroup m_Group;
+		private EntityQuery m_Group;
 		
-		protected override void OnCreateManager()
+		protected override void OnCreate()
 		{
-			base.OnCreateManager();
+			base.OnCreate();
 
-			m_Group = GetComponentGroup(typeof(NexG_ChatBox_Container));
+			m_Group = GetEntityQuery(typeof(NexG_ChatBox_Container));
 		}
 
 		protected override void OnUpdate()
 		{
-			var componentArray = m_Group.GetComponentArray<NexG_ChatBox_Container>();
-			for (var i = 0; i != componentArray.Length; i++)
+			var entityArray = m_Group.ToEntityArray(Allocator.TempJob);
+			for (var i = 0; i != entityArray.Length; i++)
 			{
-				var container = componentArray[i];
+				var entity = entityArray[i];
+				var container = EntityManager.GetComponentObject<NexG_ChatBox_Container>(entity);
 				
 				container.UpdateFromInputs(container.inputs);
 			}
+			entityArray.Dispose();
 		}
 	}
 }

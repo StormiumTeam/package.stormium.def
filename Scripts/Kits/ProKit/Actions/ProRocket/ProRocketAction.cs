@@ -2,103 +2,98 @@ using package.StormiumTeam.GameBase;
 using StormiumTeam.GameBase;
 using Stormium.Core;
 using Stormium.Default.Kits.ProKit;
-using StormiumShared.Core.Networking;
-using StormiumTeam.GameBase.Data;
+using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
+using Unity.Jobs;
+using Unity.Transforms;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
 
 namespace Stormium.Default
 {
 	public struct ProRocketAction : IStateData, IComponentData
 	{
-		public ProRocketProjectile RocketProjectile;
-		public int LastShoot;
+		public ProProjectile.Settings ProjectileSettings;
+		public int                    LastShoot;
 	}
 
-	[UpdateInGroup(typeof(ProActionSystemGroup))]
-	public class ProRocketActionUpdateSystem : ActionBaseSystem<ProRocketActionUpdateSystem.SpawnRequest>
+	[DisableAutoCreation]
+	public class ProRocketActionUpdateSystem : ActionBaseJobSystem
 	{
-		public const float ProjSpeed = 36f;
+		public const float ProjSpeed = 30f;
 
-		public struct SpawnRequest
+		private struct JobUpdateAction : IJobForEachWithEntity<ProRocketAction, ActionAmmo, ActionCooldown, StActionSlotInput, Relative<MovableDescription>>
 		{
-			public Entity Action;
-			public Entity Livable;
-			public Entity Player;
+			public int Tick;
+			public int TickDelta;
 
-			public float3            Position;
-			public float3            Velocity;
-			public ProRocketProjectile Projectile;
-		}
+			[NativeDisableParallelForRestriction] public NativeList<ProRocketProjectileProvider.Create> CreateList;
 
-		private AudioClip m_FireAudio;
-		private int m_LastShootTick;
-		
-		protected override void OnStartRunning()
-		{
-			Addressables.LoadAsset<AudioClip>("Stormium.Default.Actions.ProKitWeapon.ProRocket.FireSound").Completed += op => { m_FireAudio = op.Result; };
-		}
+			[ReadOnly] public ComponentDataFromEntity<AimLookState> AimLookStateFromEntity;
+			[ReadOnly] public ComponentDataFromEntity<LocalToWorld> LocalToWorldFromEntity;
+			[ReadOnly] public ComponentDataFromEntity<EyePosition>  EyePositionFromEntity;
 
-		protected override void OnActionUpdate()
-		{
-			ForEach((Entity                             e,
-			         ref ProRocketAction                action,
-			         ref ActionAmmo                   ammo,
-			         ref ActionCooldown           cooldown,
-			         ref StActionSlotInput          inputFromSlot,
-			         ref OwnerState<LivableDescription> livableOwner,
-			         ref EntityAuthority                authority) =>
+			public void Execute(Entity                                      entity, int index,
+			                    ref            ProRocketAction              action,
+			                    ref            ActionAmmo                   ammo,
+			                    ref            ActionCooldown               cooldown,
+			                    [ReadOnly] ref StActionSlotInput            input,
+			                    [ReadOnly] ref Relative<MovableDescription> movable)
 			{
-				if (inputFromSlot.IsActive && cooldown.CooldownFinished(Tick) && ammo.Value >= ammo.Usage)
+				if (input.IsActive && cooldown.CooldownFinished(Tick) && ammo.Value >= ammo.Usage)
 				{
 					// Restart cooldown...
-					cooldown.StartTick =  Tick;
+					cooldown.StartTick = Tick;
 					ammo.ModifyAmmo(ammo.Value - ammo.Usage);
 
-					var aim = EntityManager.GetComponentData<AimLookState>(livableOwner.Target);
-					var pos = EntityManager.GetComponentData<TransformState>(livableOwner.Target).Position + EntityManager.GetComponentData<EyePosition>(livableOwner.Target).Value;
+					var aim = AimLookStateFromEntity[movable.Target];
+					var pos = LocalToWorldFromEntity[movable.Target].Position + EyePositionFromEntity[movable.Target].Value;
 					var fwd = Quaternion.Euler(-aim.Aim.y, aim.Aim.x, 0) * Vector3.forward;
 
-					SpawnRequests.Add(new SpawnRequest
+					CreateList.Add(new ProRocketProjectileProvider.Create
 					{
-						Action     = e,
-						Livable    = livableOwner.Target,
-						Position   = pos,
-						Velocity   = fwd * ProjSpeed,
-						Projectile = action.RocketProjectile
+						Position = pos,
+						Velocity = fwd * ProjSpeed,
+						Settings = action.ProjectileSettings,
+						Owner    = entity,
 					});
 
 					action.LastShoot = Tick;
 				}
 
 				ammo.IncreaseFromDelta(TickDelta);
-			});
-
-			ForEach((ref ProRocketAction action, ref OwnerState<LivableDescription> livableOwner) =>
-			{
-				//Debug.Log($"{action.LastShoot} {m_LastShootTick}");
-				if (action.LastShoot <= m_LastShootTick)
-					return;
-
-				m_LastShootTick = action.LastShoot;
-
-				var state = EntityManager.GetComponentData<TransformState>(livableOwner.Target);
-				AudioSource.PlayClipAtPoint(m_FireAudio, state.Position, 1f);
-			});
+			}
 		}
 
-		protected override void FinalizeSpawnRequests()
+		private EntityQuery m_ActionGroup;
+
+		protected override void OnStartRunning()
 		{
-			var projProvider = World.GetExistingManager<ProRocketProjectileProvider>();
-			foreach (var request in SpawnRequests)
+			var query = new EntityQueryDesc
 			{
-				var re = projProvider.SpawnLocal(request.Position, request.Velocity, request.Projectile);
-				
-				EntityManager.ReplaceOwnerData(re, request.Action);
-				EntityManager.AddComponentData(re, new DestroyChainReaction(request.Action));
-			}
+				All = new[]
+				{
+					ComponentType.ReadWrite<ProRocketAction>(), ComponentType.ReadWrite<ActionAmmo>(), ComponentType.ReadWrite<ActionCooldown>(),
+					ComponentType.ReadOnly<StActionSlotInput>(), ComponentType.ReadOnly<Relative<MovableDescription>>(), ComponentType.ReadOnly<EntityAuthority>()
+				}
+			};
+			m_ActionGroup = GetEntityQuery(query);
+		}
+
+		protected override JobHandle OnActionUpdate(JobHandle jobHandle)
+		{
+			var job = new JobUpdateAction
+			{
+				Tick      = Tick,
+				TickDelta = TickDelta,
+
+				CreateList = World.GetExistingSystem<ProRocketProjectileProvider>().GetEntityDelayedList(),
+
+				AimLookStateFromEntity = GetComponentDataFromEntity<AimLookState>(true),
+				LocalToWorldFromEntity = GetComponentDataFromEntity<LocalToWorld>(true),
+				EyePositionFromEntity  = GetComponentDataFromEntity<EyePosition>(true),
+			};
+
+			return JobForEachExtensions.Schedule(job, m_ActionGroup, jobHandle);
 		}
 	}
 }

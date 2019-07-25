@@ -1,212 +1,120 @@
+using System.Linq;
 using StormiumTeam.GameBase;
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
 using package.StormiumTeam.GameBase;
-using Scripts.Actions;
 using Scripts.Actions.ProKitWeapons;
 using Stormium.Core;
-using StormiumShared.Core.Networking;
+using Stormium.Default.Kits.ProKit;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
-using UnityEngine;
 
 namespace Stormium.Default
 {
-	public class ProRocketProjectileProvider : SystemProvider
+	public class ProRocketProjectileProvider : BaseProviderBatch<ProRocketProjectileProvider.Create>
 	{
-		private ComponentTypes m_Components;
-		
-		protected override void OnCreateManager()
+		public struct Create
 		{
-			base.OnCreateManager();
-			
-			m_Components = new ComponentTypes(new[]
-			{
-				ComponentType.ReadWrite<ModelIdent>(),
-				ComponentType.ReadWrite<ProjectileDescription>(), 
-				ComponentType.ReadWrite<Translation>(),
-				ComponentType.ReadWrite<Rotation>(), 
-				ComponentType.ReadWrite<LocalToWorld>(), 
-				ComponentType.ReadWrite<TransformState>(), 
-				ComponentType.ReadWrite<TransformStateDirection>(), 
-				ComponentType.ReadWrite<CopyTransformToGameObject>(), 
-				ComponentType.ReadWrite<ProProjectileData>(), 
-				ComponentType.ReadWrite<ProRocketProjectile>(),
-				ComponentType.ReadWrite<Velocity>(),
-				ComponentType.ReadWrite<GenerateEntitySnapshot>()
-			});
+			public float3                 Position;
+			public float3                 Velocity;
+			public ProProjectile.Settings Settings;
+			public Entity                 Owner;
 		}
 
-		protected override Entity SpawnEntity(Entity origin, SnapshotRuntime snapshotRuntime)
+		public override void GetComponents(out ComponentType[] entityComponents)
 		{
-			var gameObject = new GameObject("ToSet");
-			var goe        = gameObject.AddComponent<GameObjectEntity>();
-
-			EntityManager.AddComponents(goe.Entity, m_Components);
-
-			var loadModelBehavior = gameObject.AddComponent<LoadModelFromStringBehaviour>();
-
-			loadModelBehavior.SpawnRoot = gameObject.transform;
-			loadModelBehavior.AssetId   = "Stormium.Default.Actions.ProKitWeapon.ProRocket.Projectile";
-			loadModelBehavior.OnLoadSetSubModelFor(EntityManager, goe.Entity);
-
-			gameObject.AddComponent<DestroyGameObjectOnEntityDestroyed>();
-			gameObject.name = $"ProRocket Projectile(o={origin}, s={goe.Entity})";
-			
-			var cf = snapshotRuntime.Header.Sender.Flags;
-			EntityManager.SetComponentData(goe.Entity, cf == SnapshotFlags.Local ? new TransformStateDirection(Dir.ConvertToState) : new TransformStateDirection(Dir.ConvertFromState));
-			
-			return goe.Entity;
-		} 
-
-		protected override void DestroyEntity(Entity worldEntity)
-		{
-			var gameObject = EntityManager.GetComponentObject<Transform>(worldEntity).gameObject;
-            
-			Object.Destroy(gameObject);
+			entityComponents = ProProjectile.ProviderBasicComponents
+			                                .Append(typeof(ProRocketProjectile))
+			                                .ToArray();
 		}
 
-		public Entity SpawnLocal(float3 position, float3 velocity, ProRocketProjectile projectile)
+		public override void SetEntityData(Entity entity, Create data)
 		{
-			var entity = SpawnLocal();
-
-			EntityManager.SetComponentData(entity, new Translation {Value = position});
-			EntityManager.SetComponentData(entity, new Velocity(velocity));
-			EntityManager.SetComponentData(entity, projectile);
-			EntityManager.SetComponentData(entity, new ProProjectileData{Phase = StandardProjectilePhase.Active});
-
-			return entity;
+			EntityManager.SetComponentData(entity, new Translation {Value = data.Position});
+			EntityManager.SetComponentData(entity, new Velocity(data.Velocity));
+			EntityManager.SetComponentData(entity, data.Settings);
+			EntityManager.SetComponentData(entity, new ProProjectile.PredictedState {phase = StandardProjectilePhase.Active});
 		}
 	}
 
-	public class ProRocketActionProvider : SystemProvider
+	public class ProRocketActionProvider : BaseProviderBatch<ProRocketActionProvider.Create>
 	{
-		struct WriteModelData
+		public struct Create
 		{
-			public ComponentDataFromEntity<ActionAmmo>                      AmmoFromEntity;
-			public ComponentDataFromEntity<DataChanged<ActionAmmo>>         AmmoChangeFromEntity;
-			public ComponentDataFromEntity<ActionSlot>                      SlotFromEntity;
-			public ComponentDataFromEntity<DataChanged<ActionSlot>>         SlotChangeFromEntity;
-			public ComponentDataFromEntity<ActionCooldown>              CooldownFromEntity;
-			public ComponentDataFromEntity<DataChanged<ActionCooldown>> CooldownChangeFromEntity;
-
-			public void Write(Entity entity, ref DataBufferWriter data)
-			{
-				var ammo     = AmmoFromEntity[entity];
-				var slot     = SlotFromEntity[entity];
-				var cooldown = CooldownFromEntity[entity];
-
-				byte mask       = 0;
-				var  maskMarker = data.WriteByte(mask);
-
-				if (AmmoChangeFromEntity[entity].IsDirty == 1)
-				{
-					data.WriteDynamicIntWithMask((ulong) ammo.Usage, (ulong) ammo.Value, (ulong) ammo.Max);
-					MainBit.SetBitAt(ref mask, 0, 1);
-				}
-
-				if (SlotChangeFromEntity[entity].IsDirty == 1)
-				{
-					data.WriteDynamicInt((ulong) slot.Value);
-					MainBit.SetBitAt(ref mask, 1, 1);
-				}
-
-				if (CooldownChangeFromEntity[entity].IsDirty == 1)
-				{
-					data.WriteDynamicIntWithMask((ulong) cooldown.Cooldown, (ulong) cooldown.StartTick);
-					MainBit.SetBitAt(ref mask, 2, 1);
-				}
-
-				data.WriteByte(mask, maskMarker);
-			}
+			public int                     Slot;
+			public Entity                  Owner;
+			public int?                    Cooldown;
+			public ActionAmmo?             Ammo;
+			public ProProjectile.Settings? Settings;
 		}
 
-		protected override Entity SpawnEntity(Entity origin, SnapshotRuntime snapshotRuntime)
+		public override void GetComponents(out ComponentType[] entityComponents)
 		{
-			var entity = EntityManager.CreateEntity
-			(
-				ComponentType.ReadWrite<ModelIdent>(),
+			entityComponents = new ComponentType[]
+			{
+				ComponentType.ReadWrite<Owner>(),
 				ComponentType.ReadWrite<ActionDescription>(),
-				ComponentType.ReadWrite<ActionTag>(),
 				ComponentType.ReadWrite<ProRocketAction>(),
 				ComponentType.ReadWrite<StActionSlotInput>(),
 				ComponentType.ReadWrite<ActionAmmo>(),
 				ComponentType.ReadWrite<ActionSlot>(),
 				ComponentType.ReadWrite<ActionCooldown>(),
-				ComponentType.ReadWrite<GenerateEntitySnapshot>()
-			);
-			
-			EntityManager.SetComponentData(entity, new ActionTag(TypeManager.GetTypeIndex(typeof(ProRocketAction))));
-
-			return entity;
+			};
 		}
 
-		protected override void DestroyEntity(Entity worldEntity)
+		public override void SetEntityData(Entity entity, Create data)
 		{
-			
-		}
-
-		public Entity SpawnLocal(Entity owner, int slot)
-		{
-			var action = SpawnLocal();
-			
-			/*EntityManager.AddComponentData(action, new OwnerSState<LivableDescription>{Target = livable});
-			EntityManager.AddComponentData(action, new OwnerState<PlayerDescription>{Target = player});*/
-			EntityManager.ReplaceOwnerData(action, owner);
-			
-			EntityManager.SetComponentData(action, new ActionSlot(slot));
-			EntityManager.SetComponentData(action, new ActionCooldown(0, 300));
-			EntityManager.SetComponentData(action ,new ActionAmmo(1500, 3000));
-			EntityManager.SetComponentData(action, new ProRocketAction
+			EntityManager.ReplaceOwnerData(entity, data.Owner);
+			EntityManager.SetComponentData(entity, new ActionSlot(data.Slot));
+			EntityManager.SetComponentData(entity, new ActionCooldown(0, data.Cooldown ?? 350));
+			EntityManager.SetComponentData(entity, data.Ammo ?? new ActionAmmo(1, 4)
 			{
-				RocketProjectile = new ProRocketProjectile
+				IsEnergyBased  = false,
+				ReloadPerRound = false,
+				TimeToReload   = GameTime.Convert(2.3f)
+			});
+			EntityManager.SetComponentData(entity, new ProRocketAction
+			{
+				ProjectileSettings = data.Settings ?? new ProProjectile.Settings
 				{
-					Radius = 0.1f
+					damageRadius = 1.6f,
+					bumpRadius   = 1.7f,
+					detectRadius = 0.125f,
+
+					bumpForce = new float3(6),
+					damage    = 25
 				}
 			});
-
-			return action;
 		}
 	}
-	
-	public class ProRocketDetonateActionProvider : SystemProvider
+
+	public class ProRocketDetonateActionProvider : BaseProviderBatch<ProRocketDetonateActionProvider.Create>
 	{
-		protected override Entity SpawnEntity(Entity origin, SnapshotRuntime snapshotRuntime)
+		public struct Create
 		{
-			var entity = EntityManager.CreateEntity
-			(
+			public int    Slot;
+			public Entity Owner;
+		}
+
+		public override void GetComponents(out ComponentType[] entityComponents)
+		{
+			entityComponents = new ComponentType[]
+			{
 				ComponentType.ReadWrite<ModelIdent>(),
 				ComponentType.ReadWrite<ActionDescription>(),
-				ComponentType.ReadWrite<ActionTag>(),
 				ComponentType.ReadWrite<ProRocketDetonateAction>(),
 				ComponentType.ReadWrite<StActionSlotInput>(),
 				ComponentType.ReadWrite<ActionSlot>(),
 				ComponentType.ReadWrite<ActionCooldown>(),
-				ComponentType.ReadWrite<GenerateEntitySnapshot>()
-			);
-			
-			EntityManager.SetComponentData(entity, new ActionTag(TypeManager.GetTypeIndex(typeof(ProRocketDetonateAction))));
-
-			return entity;
+			};
 		}
 
-		protected override void DestroyEntity(Entity worldEntity)
+		public override void SetEntityData(Entity entity, Create data)
 		{
-			
-		}
-
-		public Entity SpawnLocal(Entity livable, Entity player, int slot)
-		{
-			var action = SpawnLocal();
-
-			EntityManager.AddComponentData(action, new OwnerState<LivableDescription> {Target = livable});
-			EntityManager.AddComponentData(action, new OwnerState<PlayerDescription> {Target  = player});
-			
-			EntityManager.SetComponentData(action, new ActionSlot(slot));
-			EntityManager.SetComponentData(action, new ActionCooldown(0, 500));
-
-			return action;
+			EntityManager.ReplaceOwnerData(entity, data.Owner);
+			EntityManager.SetComponentData(entity, new ActionSlot(data.Slot));
+			EntityManager.SetComponentData(entity, new ActionCooldown(0, 250));
 		}
 	}
 }

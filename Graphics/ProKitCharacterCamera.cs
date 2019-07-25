@@ -3,7 +3,6 @@ using StandardAssets.Characters.Physics;
 using Stormium.Core;
 using Stormium.Default;
 using Stormium.Default.States;
-using StormiumShared.Core;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
 using Unity.Entities;
@@ -50,9 +49,9 @@ namespace Graphics
 		public CharacterCamera CameraData => m_CameraData;
 		public GlobalSettings Settings;
 		
-		protected override void OnCreateManager()
+		protected override void OnCreate()
 		{
-			base.OnCreateManager();
+			base.OnCreate();
 			
 			Settings = ScriptableObject.CreateInstance<GlobalSettings>();
 			
@@ -73,13 +72,21 @@ namespace Graphics
 			if (!EntityManager.HasComponent<ProKitMovementState>(character))
 				return;
 
-			var dt = GetSingleton<SingletonGameTime>().DeltaTime;
+			var dt = GetSingleton<GameTimeComponent>().DeltaTime;
 
 			var controller = EntityManager.GetComponentObject<OpenCharacterController>(character);
 			var movementState = EntityManager.GetComponentData<ProKitMovementState>(character);
 			var input = EntityManager.GetComponentData<ProKitInputState>(character);
 			var aim = EntityManager.GetComponentData<AimLookState>(character).Aim;
 			var velocity = EntityManager.GetComponentData<Velocity>(character);
+			
+			var playerData = EntityManager.GetComponentData<GamePlayer>(gamePlayer);
+			if (playerData.IsSelf)
+			{
+				var basicUserCommand = EntityManager.GetComponentData<GamePlayerUserCommand>(gamePlayer);
+				aim.x = basicUserCommand.Look.x;
+				aim.y = basicUserCommand.Look.y;
+			}
 
 			var transform = controller.transform;
 			var position = transform.position;
@@ -89,7 +96,7 @@ namespace Graphics
 			var hri = m_CameraData.RollFromInput;
 			var fov = m_CameraData.FocalLengthModifier;
 
-			var grounded = controller.isGrounded || movementState.ForceUnground == 1;
+			var grounded = controller.isGrounded || movementState.ForceUnground;
 			
 			if (grounded && (m_CameraData.SmoothStepCooldown <= 0f || velocity.Value.y > -1f))
 			{

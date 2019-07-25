@@ -1,6 +1,5 @@
 using Stormium.Core;
 using Stormium.Default.States;
-using StormiumShared.Core.Networking;
 using StormiumTeam.GameBase;
 using Unity.Entities;
 
@@ -8,44 +7,31 @@ namespace Stormium.Default.GameModes
 {
     public partial class DeathMatchBehaviorSystem
     {
-        public ComponentGroup PlayerWithoutDmData;
+        public EntityQuery PlayerWithoutDmData;
         
         public ModelIdent DmPlayerModelId;
 
         public void Init_PlayerManagement()
         {
-            PlayerWithoutDmData = GetComponentGroup
+            PlayerWithoutDmData = GetEntityQuery
             (
                 ComponentType.ReadWrite<GamePlayer>(),
                 ComponentType.Exclude<DeathMatchPlayer>()
             );
-
-            DmPlayerModelId = World.GetOrCreateManager<EntityModelManager>().Register("dm.player.model", SpawnDmPlayer, DestroyDmPlayer);
         }
 
         public void ManageClients()
         {
-            ForEach((Entity entity, ref GamePlayer player) =>
+            Entities.With(PlayerWithoutDmData).ForEach((Entity entity, ref GamePlayer player) =>
             {
                 PostUpdateCommands.AddComponent(entity, new DeathMatchPlayer(default));
                 if (!EntityManager.HasComponent<ServerCameraState>(entity))
                     PostUpdateCommands.AddComponent(entity, new ServerCameraState());
-                if (!EntityManager.HasComponent<BasicUserCommand>(entity))
-                    PostUpdateCommands.AddComponent(entity, new BasicUserCommand());
-                if (!EntityManager.HasComponent<ActionUserCommand>(entity))
-                    PostUpdateCommands.AddBuffer<ActionUserCommand>(entity);
-
-            }, PlayerWithoutDmData);
-        }
-
-        private Entity SpawnDmPlayer(Entity origin, SnapshotRuntime runtime)
-        {
-            return default;
-        }
-        
-        private void DestroyDmPlayer(Entity worldentity)
-        {
-            return;
+                if (!EntityManager.HasComponent<GamePlayerUserCommand>(entity))
+                    PostUpdateCommands.AddComponent(entity, new GamePlayerUserCommand());
+                if (!EntityManager.HasComponent<GamePlayerActionCommand>(entity))
+                    PostUpdateCommands.AddBuffer<GamePlayerActionCommand>(entity);
+            });
         }
     }
 }

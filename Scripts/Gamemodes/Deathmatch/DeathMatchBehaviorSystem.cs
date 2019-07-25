@@ -1,7 +1,5 @@
-using package.stormiumteam.networking;
 using package.stormiumteam.networking.runtime.lowlevel;
 using Stormium.Core;
-using StormiumShared.Core.Networking;
 using StormiumTeam.GameBase;
 using Unity.Collections;
 using Unity.Entities;
@@ -13,23 +11,18 @@ namespace Stormium.Default.GameModes
         public int MaxFrag;
     }
     
-    public partial class DeathMatchBehaviorSystem : GameModeSystem, ISnapshotSubscribe, ISnapshotManageForClient
+    public partial class DeathMatchBehaviorSystem : GameModeSystem
     {
-        private ComponentGroup m_SimulatedGameModes;
-        private PatternResult m_SnapshotPattern;
+        private EntityQuery m_SimulatedGameModes;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            base.OnCreateManager();
-            
-            m_SnapshotPattern = World.GetOrCreateManager<NetPatternSystem>()
-                                     .GetLocalBank()
-                                     .Register($"000{nameof(DeathMatchBehaviorSystem)}.Snapshot");
+            base.OnCreate();
             
             Init_PlayerManagement();
             Init_CharacterManagement();
 
-            m_SimulatedGameModes = GetComponentGroup
+            m_SimulatedGameModes = GetEntityQuery
             (
                 ComponentType.ReadWrite<DeathMatchData>(),
                 ComponentType.ReadWrite<EntityAuthority>()
@@ -61,37 +54,10 @@ namespace Stormium.Default.GameModes
 
         private void ForceCharacterCamera()
         {
-            ForEach((Entity entity, ref DeathMatchPlayer client) =>
+            Entities.ForEach((Entity entity, ref DeathMatchPlayer client) =>
             {
                 
             });
-        }
-
-        // Snapshot Implementation
-        public PatternResult GetSystemPattern()
-        {
-            return m_SnapshotPattern;
-        }
-
-        public void SubscribeSystem()
-        {
-        }
-
-        public DataBufferWriter WriteData(SnapshotReceiver receiver, SnapshotRuntime runtime)
-        {
-            var buffer = new DataBufferWriter(0, Allocator.Temp);
-
-            if (!EntityManager.HasComponent<DeathMatchPlayer>(receiver.Client))
-                return buffer;
-
-            var dmClient = EntityManager.GetComponentData<DeathMatchPlayer>(receiver.Client);
-            var dmChar = dmClient.Character;
-            
-            return buffer;
-        }
-
-        public void ReadData(SnapshotSender sender, SnapshotRuntime runtime, DataBufferReader sysData)
-        {
         }
     }
 }

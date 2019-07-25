@@ -1,9 +1,8 @@
-using StormiumShared.Core.Networking;
 using Unity.Entities;
 
 namespace Stormium.Default.GameModes
 {
-    public struct DeathMatchPlayer : IStateData, IComponentData
+    public struct DeathMatchPlayer : IComponentData
     {
         public Entity Character;
 

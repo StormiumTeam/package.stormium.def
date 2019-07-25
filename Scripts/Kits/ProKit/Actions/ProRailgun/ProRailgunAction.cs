@@ -1,20 +1,18 @@
 using package.StormiumTeam.GameBase;
 using StormiumTeam.GameBase;
 using Stormium.Core;
-using Stormium.Default.Kits.ProKit;
-using StormiumShared.Core.Networking;
 using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Scripts.Actions.ProRailgun
 {
-	public struct ProRailgunAction : IStateData, IComponentData
+	public struct 	ProRailgunAction : IStateData, IComponentData
 	{
 		public float ScanRadius;
 		public int Damage;
 	}
 	
-	[UpdateInGroup(typeof(ProActionSystemGroup))]
+	[DisableAutoCreation]
 	public class ProRailgunActionSystem : ActionBaseSystem<ProRailgunActionSystem.SpawnRequest>
 	{
 		public struct SpawnRequest
@@ -29,7 +27,7 @@ namespace Scripts.Actions.ProRailgun
 
 		protected override void OnActionUpdate()
 		{
-			ForEach((Entity entity, ref ProRailgunAction action, ref StActionSlotInput input, ref ActionAmmo ammo, ref ActionCooldown cooldown, ref OwnerState<LivableDescription> owner, ref EntityAuthority authority) =>
+			Entities.ForEach((Entity entity, ref ProRailgunAction action, ref StActionSlotInput input, ref ActionAmmo ammo, ref ActionCooldown cooldown, ref Owner owner, ref EntityAuthority authority) =>
 			{
 				if (input.IsActive && cooldown.CooldownFinished(Tick) && ammo.Value >= ammo.Usage)
 				{
@@ -54,9 +52,10 @@ namespace Scripts.Actions.ProRailgun
 
 		protected override void FinalizeSpawnRequests()
 		{
-			var projProvider = World.GetExistingManager<ProRailgunProjectileProvider>();
-			foreach (var request in SpawnRequests)
+			var projProvider = World.GetExistingSystem<ProRailgunProjectileProvider>();
+			for (var i = 0; i != SpawnRequests.Length; i++)
 			{
+				var request = SpawnRequests[i];
 				var projectile = projProvider.SpawnLocal(request.Position, request.Direction, new ProRailgunProjectile{ScanRadius = request.ScanRadius});
 				
 				EntityManager.ReplaceOwnerData(projectile, request.Action);

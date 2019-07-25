@@ -18,9 +18,9 @@ namespace GUIScripts.DebugWindow
 		private const int MaxLines = 10;
 		private List<string> m_ToLog = new List<string>();
 		
-		protected override void OnCreateManager()
+		protected override void OnCreate()
 		{
-			base.OnCreateManager();
+			base.OnCreate();
 			
 			GameDebug.onLogUpdate += OnLogUpdate;
 		}
@@ -53,7 +53,7 @@ namespace GUIScripts.DebugWindow
 
 		protected override void OnStartRunning()
 		{
-			ForEach((DebugWindowBehavior debugWindow) => { debugWindow.LinesText.text = ".\n.\n.\n.\n.\n.\n.\n.\n.\n."; });
+			Entities.ForEach((DebugWindowBehavior debugWindow) => { debugWindow.LinesText.text = ".\n.\n.\n.\n.\n.\n.\n.\n.\n."; });
 		}
 
 		protected override void OnUpdate()
@@ -65,7 +65,7 @@ namespace GUIScripts.DebugWindow
 			if (Input.GetKeyDown(KeyCode.E))
 				Debug.LogError("Error");
 			
-			ForEach((DebugWindowBehavior debugWindow) =>
+			Entities.ForEach((DebugWindowBehavior debugWindow) =>
 			{
 				foreach (var str in m_ToLog)
 					Append(debugWindow, str);

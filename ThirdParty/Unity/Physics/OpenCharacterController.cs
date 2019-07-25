@@ -360,11 +360,27 @@ namespace StandardAssets.Characters.Physics
 		[Header("Collision")]
 		[SerializeField, Tooltip("Limits the collider to only climb slopes that are less steep (in degrees) than the indicated value.")]
 		float m_SlopeLimit = 45.0f;
+		
+		public float SlopeLimit
+		{
+			get => m_SlopeLimit;
+			set
+			{
+				m_SlopeLimit = value;
+				m_SlopeMovementOffset = m_StepOffset / Mathf.Tan(m_SlopeLimit * Mathf.Deg2Rad);
+			}
+		}
 
 		[SerializeField, Tooltip("The character will step up a stair only if it is closer to the ground than the indicated value. " +
 		         "This should not be greater than the Character Controller’s height or it will generate an error. " +
 		         "Generally this should be kept as small as possible.")]
 		float m_StepOffset = 0.3f;
+
+		public float StepOffset
+		{
+			get => m_StepOffset;
+			set => m_StepOffset = value;
+		}
 
 		[SerializeField, Tooltip(
 			"Two colliders can penetrate each other as deep as their Skin Width. Larger Skin Widths reduce jitter. " +
@@ -588,7 +604,7 @@ namespace StandardAssets.Characters.Physics
 		}
 
 		// Update sliding down slopes, and changes to the capsule's height and center.
-		void Update()
+		public void CallUpdate()
 		{
 			UpdateSlideDownSlopes();
 			UpdatePendingHeightAndCenter();
@@ -771,6 +787,8 @@ namespace StandardAssets.Characters.Physics
 					{
 						didCollide = true;
 						hitInfo.distance = Mathf.Max(0.0f, hitInfo.distance - extraDistance);
+						
+						Debug.Log("yes 2");
 					}
 				}
 			}
@@ -1258,7 +1276,7 @@ namespace StandardAssets.Characters.Physics
 			{
 				var refMoveVector = remainingMoveVector.moveVector;
 				var collided = MoveMajorStep(ref refMoveVector, remainingMoveVector.canSlide, didTryToStickToGround, ref virtualPosition);
-
+				
 				remainingMoveVector.moveVector = refMoveVector;
 
 				// Character stuck?
@@ -1348,7 +1366,7 @@ namespace StandardAssets.Characters.Physics
 
 				// Stop current move loop vector
 				moveVector = Vector3.zero;
-
+				
 				return false;
 			}
 
@@ -1373,6 +1391,7 @@ namespace StandardAssets.Characters.Physics
 				                     canSlide,
 				                     tryGrounding,
 				                     true, ref currentPosition);
+				
 				return true;
 			}
 
@@ -1604,7 +1623,7 @@ namespace StandardAssets.Characters.Physics
 			{
 				downDistance = Mathf.Max(downDistance, Mathf.Abs(moveVector.y));
 			}
-
+			
 			if (downDistance <= k_MaxStickToGroundDownDistance)
 			{
 				getDownVector = new MoveVector(Vector3.down * downDistance, false);
@@ -1690,6 +1709,7 @@ namespace StandardAssets.Characters.Physics
 			                                    GetCollisionLayerMask(),
 			                                    m_TriggerQuery))
 			{
+				Debug.DrawLine(GetBottomSphereWorldPosition(currentPosition) + offsetPosition, bigRadiusHitInfo.point, Color.magenta, 0.1f);
 				return bigRadiusHitInfo.distance <= distance;
 			}
 

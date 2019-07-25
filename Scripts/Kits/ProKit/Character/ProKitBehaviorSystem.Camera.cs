@@ -1,5 +1,7 @@
+using Stormium.Core;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace package.stormium.def.Kits.ProKit
@@ -8,11 +10,22 @@ namespace package.stormium.def.Kits.ProKit
     {
         private void UpdateCamera()
         {
-            ForEach((Transform transform, ref ProKitMovementState state, ref AimLookState aimLook, ref CameraModifierData camModifier, ref OwnerState<PlayerDescription> player) =>
+            Entities.ForEach((Transform transform, ref ProKitMovementState state, ref AimLookState aimLook, ref CameraModifierData camModifier, ref Relative<PlayerDescription> player) =>
             {
                 camModifier.Position = transform.position + new Vector3(0.0f, 1.6f, 0.0f);
-                camModifier.Rotation = Quaternion.Euler(-aimLook.Aim.y, aimLook.Aim.x, 0);
+
+                var aim = new float3(-aimLook.Aim.y, aimLook.Aim.x, 0);
+
+                var playerData = EntityManager.GetComponentData<GamePlayer>(player.Target);
+                if (playerData.IsSelf)
+                {
+                    var basicUserCommand = EntityManager.GetComponentData<GamePlayerUserCommand>(player.Target);
+                    aim.x = basicUserCommand.Look.x;
+                    aim.y = basicUserCommand.Look.y;
+                }
+
+                camModifier.Rotation = Quaternion.Euler(aim);
             });
         }
     }
-}  
+}

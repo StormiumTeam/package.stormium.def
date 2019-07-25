@@ -16,7 +16,7 @@ namespace package.stormium.def
         {
             return math.normalizesafe(worldRotation * new Vector3(inputDirection.x, 0, inputDirection.y));
         }
-        
+
         public static float3 ComputeDirectionFwd(Vector3 forward, Quaternion rotation, float2 input)
         {
             var inputDirection3D = math.normalizesafe(rotation * new Vector3(input.x, 0, input.y));

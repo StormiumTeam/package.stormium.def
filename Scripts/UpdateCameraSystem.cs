@@ -3,6 +3,7 @@ using Stormium.Default.States;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
 using StormiumTeam.GameBase.Data;
+using StormiumTeam.Shared.Gen;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -14,22 +15,7 @@ namespace Stormium.Default
     [UpdateInGroup(typeof(STUpdateOrder.UO_FinalizeData))]
     public class UpdateCameraSystem : ComponentSystem
     {
-        struct DataToSet
-        {
-            public CameraMode LastSuperiorMode;
-
-            public Entity     Target;
-            public float3     PosOffset;
-            public quaternion RotOffset;
-        }
-
-        struct CameraData
-        {
-            public Camera camera;
-            public Entity entity;
-        }
-
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
             // Create a default local camera state
             var camStateEntity = EntityManager.CreateEntity(typeof(LocalCameraState));
@@ -37,95 +23,105 @@ namespace Stormium.Default
             // Create a default free move camera
             var freeMoveEntity = EntityManager.CreateEntity(typeof(LocalCameraFreeMove), typeof(CameraModifierData), typeof(Translation), typeof(Rotation), typeof(LocalToWorld));
 
-            EntityManager.SetComponentData(camStateEntity, new LocalCameraState {Target = freeMoveEntity});
-            EntityManager.SetComponentData(freeMoveEntity, new LocalCameraFreeMove{Intensity = 8f});
+            EntityManager.SetComponentData(camStateEntity, new LocalCameraState
+            {
+                Data = new CameraState
+                {
+                    Target = freeMoveEntity
+                }
+            });
+            EntityManager.SetComponentData(freeMoveEntity, new LocalCameraFreeMove {Intensity = 8f});
+
+            m_CameraQuery            = GetEntityQuery(typeof(GameCamera));
+            m_LocalCameraStateQuery  = GetEntityQuery(typeof(LocalCameraState));
+            m_ServerCameraStateQuery = GetEntityQuery(typeof(ServerCameraState), typeof(GamePlayerLocalTag), typeof(GamePlayer));
         }
 
-        private DataToSet dataToSet;
-        private CameraData cameraData;
-        
+        private EntityQuery m_CameraQuery;
+        private EntityQuery m_LocalCameraStateQuery;
+        private EntityQuery m_ServerCameraStateQuery;
+
         protected override void OnUpdate()
         {
-            dataToSet = default;
-            cameraData = default;
-
             if (Input.GetKeyDown(KeyCode.Return))
                 Cursor.lockState = CursorLockMode.Locked;
             if (Input.GetKeyDown(KeyCode.Escape))
                 Cursor.lockState = CursorLockMode.None;
 
             Cursor.visible = Cursor.lockState != CursorLockMode.Locked;
-            
-            Profiler.BeginSample("ForEach1");
-            ForEach((Entity entity, GameCamera gameCamera) =>
+
+            Camera camera       = default;
+            Entity cameraEntity = default;
+
+            GameCamera gameCamera = default;
+            foreach (var e in this.ToEnumerator_C(m_CameraQuery, ref gameCamera))
             {
-                if (cameraData.entity != default)
+                if (cameraEntity != default)
                 {
-                    Debug.LogWarning($"There is already a game camera, but we found another one? (c={cameraData.entity}, n={entity})");
+                    Debug.LogWarning($"There is already a game camera, but we found another one? (c={camera}, n={cameraEntity})");
                     return;
                 }
 
-                cameraData.camera = gameCamera.Camera;
-                cameraData.entity = entity;
-            });
-            Profiler.EndSample();
+                camera       = gameCamera.Camera;
+                cameraEntity = e.Entity;
+            }
 
-            Profiler.BeginSample("ForEach2");
-            ForEach((ref LocalCameraState cameraState) =>
+            var lastSuperiorMode = CameraMode.Default;
+            var target           = Entity.Null;
+            var offset           = RigidTransform.identity;
+
+            LocalCameraState localCameraState = default;
+            foreach (var e in this.ToEnumerator_D(m_LocalCameraStateQuery, ref localCameraState))
             {
-                if (dataToSet.LastSuperiorMode > cameraState.Mode)
+                if (lastSuperiorMode > localCameraState.Mode)
                     return;
 
-                dataToSet.LastSuperiorMode = cameraState.Mode;
-                dataToSet.Target           = cameraState.Target;
-                dataToSet.PosOffset        = default;
-                dataToSet.RotOffset        = default;
-            });
-            Profiler.EndSample();
+                lastSuperiorMode = localCameraState.Mode;
+                target           = localCameraState.Target;
+                offset           = localCameraState.Offset;
+            }
 
-            Profiler.BeginSample("ForEach3");
-            ForEach((ref GamePlayer player, ref ServerCameraState cameraState) =>
+            ServerCameraState serverCameraState = default;
+            foreach (var e in this.ToEnumerator_D(m_ServerCameraStateQuery, ref serverCameraState))
             {
-                if (player.IsSelf == 0)
-                    return;
-                
-                if (dataToSet.LastSuperiorMode > cameraState.Mode)
+                if (lastSuperiorMode > serverCameraState.Mode)
                     return;
 
-                dataToSet.LastSuperiorMode = cameraState.Mode;
-                dataToSet.Target           = cameraState.Target;
-                dataToSet.PosOffset        = cameraState.PosOffset;
-                dataToSet.RotOffset        = cameraState.RotOffset;
-            });
-            Profiler.EndSample();
+                lastSuperiorMode = serverCameraState.Mode;
+                target           = serverCameraState.Target;
+                offset           = serverCameraState.Offset;
+            }
 
-            if (cameraData.entity == default)
+            if (cameraEntity == default || camera == null)
             {
                 Debug.LogError("No Game Camera found?");
                 return;
             }
 
-            Compute(cameraData.camera);
-        }
-
-        private void Compute(Camera camera)
-        {
-            if (dataToSet.Target == default)
+            // ------- ------ ------ //
+            // Compute camera data
+            // ------- ------ ------ //
+            if (target == default)
             {
                 Debug.LogWarning("No target found");
                 return;
             }
-            
-            if (!math.all(dataToSet.RotOffset.value))
-                dataToSet.RotOffset = quaternion.identity;
 
-            var modifier = EntityManager.GetComponentData<CameraModifierData>(dataToSet.Target);
-            var tr       = camera.transform;
+            if (!math.all(offset.rot.value))
+                offset.rot = quaternion.identity;
 
-            camera.fieldOfView = math.max(modifier.FieldOfView, 30);
+            var tr             = camera.transform;
+            var modifierOffset = RigidTransform.identity;
+            if (EntityManager.HasComponent<CameraModifierData>(target))
+            {
+                var modifier = EntityManager.GetComponentData<CameraModifierData>(target);
+                camera.fieldOfView = math.max(modifier.FieldOfView, 30);
 
-            tr.position = modifier.Position + dataToSet.PosOffset;
-            tr.rotation = math.mul(modifier.Rotation, dataToSet.RotOffset);
+                modifierOffset = new RigidTransform(modifier.Rotation, modifier.Position);
+            }
+
+            tr.position = modifierOffset.pos + offset.pos;
+            tr.rotation = math.mul(modifierOffset.rot, offset.rot);
         }
     }
 }
