@@ -7,6 +7,7 @@ using Stormium.Default.Kits.ProKit.ProShotgun;
 using Stormium.Default.States;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -40,7 +41,7 @@ namespace Stormium.Default.Tests.projectiles
 
 	public class TestProjectileScene : MonoBehaviour, IConvertGameObjectToEntity
 	{
-		public ProjectileToTest projectileToTest = ProjectileToTest.RocketLauncher;
+		public ProjectileToTest projectileToTest = ProjectileToTest.Shotgun;
 		public float            camIntensity     = 8f;
 
 		public void Convert(Entity entity, EntityManager dstManager, GameObjectConversionSystem conversionSystem)
@@ -50,67 +51,65 @@ namespace Stormium.Default.Tests.projectiles
 			dstManager.SetComponentData(player, new GamePlayer(0, true));
 
 			// Character
-			var masterEntity  = dstManager.CreateEntity(typeof(TestProjectileSceneTag), typeof(OwnerChild));
-			var livableEntity = dstManager.CreateEntity(typeof(TestProjectileSceneTag), typeof(LivableDescription));
-			var movableEntity = dstManager.CreateEntity
-			(
-				typeof(TestProjectileSceneTag), typeof(MovableDescription), typeof(LocalCameraFreeMove), typeof(CameraModifierData),
-				typeof(AimLookState), typeof(EyePosition),
+			var masterEntity = dstManager.CreateEntity(typeof(TestProjectileSceneTag),
+				// --- LIVABLE ---
+				typeof(LivableDescription),
 				typeof(ActionContainer),
-				typeof(Translation), typeof(Rotation), typeof(LocalToWorld)
-			);
-			
+				// --- MOVABLE ---
+				typeof(MovableDescription), typeof(LocalCameraFreeMove), typeof(CameraModifierData),
+				typeof(AimLookState), typeof(EyePosition),
+				typeof(Translation), typeof(Rotation), typeof(LocalToWorld),
+				// other...
+				typeof(OwnerChild));
+
 			dstManager.ReplaceOwnerData(masterEntity, player);
-
-			dstManager.AddChildrenOwner(livableEntity, masterEntity);
-			dstManager.AddChildrenOwner(movableEntity, masterEntity);
-
-			dstManager.ReplaceOwnerData(livableEntity, masterEntity);
-			dstManager.ReplaceOwnerData(movableEntity, masterEntity);
 
 			// Camera
 			var localCamera = dstManager.CreateEntity(typeof(LocalCameraState));
+			dstManager.SetComponentData(localCamera, new LocalCameraState
+			{
+				Data = new CameraState
+				{
+					Target = masterEntity, Mode = CameraMode.Forced
+				}
+			});
+			dstManager.SetComponentData(masterEntity, new LocalCameraFreeMove {Intensity = camIntensity});
 
-			dstManager.SetComponentData(localCamera, new LocalCameraState {Target         = movableEntity, Mode = CameraMode.Forced});
-			dstManager.SetComponentData(movableEntity, new LocalCameraFreeMove {Intensity = camIntensity});
+			void CreateAction<TProvider, TActionCreate>(TActionCreate create, ProjectileToTest projectileToTest)
+				where TProvider : BaseProviderBatch<TActionCreate>
+				where TActionCreate : struct
+			{
+				using (var entities = new NativeList<Entity>(1, Allocator.TempJob))
+				{
+					var provider = dstManager.World.GetExistingSystem<TProvider>();
+					provider.SpawnLocalEntityWithArguments(create, entities);
+
+					dstManager.AddComponentData(entities[0], new TestProjectileId {Value = projectileToTest});
+#if UNITY_EDITOR
+					dstManager.SetName(entities[0], $"TestProjectile > {projectileToTest} Action ({entities[0]})");
+#endif
+				}
+			}
 
 			// Actions
-			var rocketProvider = dstManager.World.GetExistingSystem<ProRocketActionProvider>();
-			var rocketAction   = rocketProvider.SpawnLocal(masterEntity, 0);
-
-			var grenadeProvider = dstManager.World.GetExistingSystem<ProGrenadeActionProvider>();
-			var grenadeAction   = grenadeProvider.SpawnLocal(masterEntity, 0);
-
-			var mortarProvider = dstManager.World.GetExistingSystem<ProMortarActionProvider>();
-			var mortarAction = mortarProvider.SpawnLocal(masterEntity, 1);
-
-			var shotgunProvider = dstManager.World.GetExistingSystem<ProShotgunAction.Provider>();
-			var shotgunAction = shotgunProvider.SpawnLocal(masterEntity, 0);
-			
-			dstManager.AddComponentData(rocketAction, new TestProjectileId{Value = ProjectileToTest.RocketLauncher});
-			dstManager.AddComponentData(grenadeAction, new TestProjectileId{Value = ProjectileToTest.GrenadeMortar});
-			dstManager.AddComponentData(mortarAction, new TestProjectileId{Value = ProjectileToTest.GrenadeMortar});
-			dstManager.AddComponentData(shotgunAction, new TestProjectileId{Value = ProjectileToTest.Shotgun});
+			CreateAction<ProShotgunAction.Provider, ProShotgunAction.Create>(new ProShotgunAction.Create
+			{
+				Slot  = 0,
+				Owner = masterEntity,
+			}, ProjectileToTest.Shotgun);
 
 			// Singleton
 			dstManager.AddComponentData(entity, new TestProjectileSceneData
 			{
 				Projectile    = projectileToTest,
-				MovableEntity = movableEntity
+				MovableEntity = masterEntity
 			});
 
-#if UNITY_EDITOR
+
 			dstManager.SetName(entity, $"TestProjectile > Singleton Scene Data ({entity})");
 			dstManager.SetName(player, $"TestProjectile > Player ({player})");
 			dstManager.SetName(masterEntity, $"TestProjectile > Character Master ({masterEntity})");
-			dstManager.SetName(livableEntity, $"TestProjectile > Character Livable ({livableEntity})");
-			dstManager.SetName(movableEntity, $"TestProjectile > Character Movable ({movableEntity})");
 			dstManager.SetName(localCamera, $"TestProjectile > Camera ({localCamera})");
-			dstManager.SetName(rocketAction, $"TestProjectile > Rocket Action ({rocketAction})");
-			dstManager.SetName(grenadeAction, $"TestProjectile > Grenade Action ({grenadeAction})");
-			dstManager.SetName(mortarAction, $"TestProjectile > Mortar Action ({mortarAction})");
-			dstManager.SetName(shotgunAction, $"TestProjectile > Shotgun Action ({shotgunAction})");
-#endif
 		}
 	}
 

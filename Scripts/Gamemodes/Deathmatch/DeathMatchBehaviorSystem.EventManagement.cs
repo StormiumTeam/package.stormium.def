@@ -1,6 +1,7 @@
 using package.stormium.def.Kits.ProKit;
 using Runtime.BaseSystems;
 using StormiumTeam.GameBase;
+using StormiumTeam.GameBase.Components;
 using Unity.Mathematics;
 
 namespace Stormium.Default.GameModes
@@ -11,26 +12,26 @@ namespace Stormium.Default.GameModes
 		{
 			var ruleGroup = World.GetExistingSystem<GameEventRuleSystemGroup>();
 			ruleGroup.Process();
-			
-			Entities.ForEach((ref GameEvent gameEvent, ref TargetBumpEvent explosionEvent) =>
+
+			Entities.ForEach((ref GameEvent gameEvent, ref TargetImpulseEvent explosionEvent) =>
 			{
-				if (!EntityManager.HasComponent<Velocity>(explosionEvent.Victim))
+				if (!EntityManager.HasComponent<Velocity>(explosionEvent.Destination))
 					return;
 
-				var velocity = EntityManager.GetComponentData<Velocity>(explosionEvent.Victim);
+				var velocity = EntityManager.GetComponentData<Velocity>(explosionEvent.Destination);
 
-				velocity.Value *= math.clamp(explosionEvent.VelocityReset, 0, 1);
-				velocity.Value += explosionEvent.Direction * explosionEvent.Force;
-				
-				EntityManager.SetComponentData(explosionEvent.Victim, velocity);
+				velocity.Value *= math.clamp(explosionEvent.Momentum, 0, 1);
+				velocity.Value += explosionEvent.Force;
 
-				if (EntityManager.HasComponent<ProKitMovementState>(explosionEvent.Victim))
+				EntityManager.SetComponentData(explosionEvent.Destination, velocity);
+
+				if (EntityManager.HasComponent<ProKitMovementState>(explosionEvent.Destination))
 				{
-					var movementState = EntityManager.GetComponentData<ProKitMovementState>(explosionEvent.Victim);
+					var movementState = EntityManager.GetComponentData<ProKitMovementState>(explosionEvent.Destination);
 
 					movementState.ForceUnground = true;
-					
-					EntityManager.SetComponentData<ProKitMovementState>(explosionEvent.Victim, movementState);
+
+					EntityManager.SetComponentData<ProKitMovementState>(explosionEvent.Destination, movementState);
 				}
 			});
 		}

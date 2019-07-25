@@ -12,124 +12,69 @@ using UnityEngine;
 
 namespace Stormium.Default.Kits.ProKit.ProShotgun
 {
-	public struct ProShotgunAction : IComponentData, ISerializableAsPayload
+	public struct ProShotgunAction : IComponentData
 	{
 		public ProProjectile.Settings SpawnSettings;
 		public float3                 Speed;
 		public int2                   Pattern;
 		public float                  PatternSize;
 
-		public void Write(ref DataBufferWriter data, SnapshotReceiver receiver, SnapshotRuntime runtime)
+		public void Shoot(ActionShootHelper shootHelper, NativeList<(float3 position, float3 velocity)> projectiles)
 		{
-			data.WriteRef(ref this);
-		}
-
-		public void Read(ref DataBufferReader data, SnapshotSender sender, SnapshotRuntime runtime)
-		{
-			this = data.ReadValue<ProShotgunAction>();
-		}
-
-		public class Process : DefaultActionBaseSystem<>
-		{
-			struct Job : IJobForEachWithEntity<ProShotgunAction, ActionAmmo, ActionCooldown, StActionSlotInput, Relative<MovableDescription>>
+			for (var x = 0; x != Pattern.x; x++)
 			{
-				public GameTime GameTime;
-
-				[ReadOnly] public ComponentDataFromEntity<LocalToWorld> TransformFromEntity;
-				[ReadOnly] public ComponentDataFromEntity<EyePosition>  EyePositionFromEntity;
-				[ReadOnly] public ComponentDataFromEntity<AimLookState> AimLookFromEntity;
-
-				[NativeDisableParallelForRestriction] public NativeList<(float3 p, float3 v, Entity o)> CreateProjectileList;
-
-				public void Execute(Entity                           entity, int _,
-				                    ref ProShotgunAction             shotgun,
-				                    ref ActionAmmo                   ammo,
-				                    ref ActionCooldown               cooldown,
-				                    ref StActionSlotInput            input,
-				                    ref Relative<MovableDescription> movable)
+				for (var y = 0; y != Pattern.y; y++)
 				{
-					if (input.IsActive
-					    && cooldown.CooldownFinished(GameTime.Tick)
-					    && ammo.Value >= ammo.Usage)
-					{
-						cooldown.StartTick = GameTime.Tick;
-						ammo.IncreaseFromDelta(-ammo.Usage);
+					var shootPos = shootHelper.GetPosition();
+					var shootDir = shootHelper.GetDirectionWithAimDelta(new float2(x - Pattern.x / 2, y - Pattern.y / 2) * PatternSize);
 
-						var helper = new ActionShootHelper(TransformFromEntity[movable.Target], EyePositionFromEntity[movable.Target], AimLookFromEntity[movable.Target]);
-
-						for (var x = 0; x != shotgun.Pattern.x; x++)
-						{
-							for (var y = 0; y != shotgun.Pattern.y; y++)
-							{
-								var shootPos = helper.GetPosition();
-								var shootDir = helper.GetDirectionWithAimDelta(new float2(x - shotgun.Pattern.x / 2, y - shotgun.Pattern.y / 2) * shotgun.PatternSize);
-
-								CreateProjectileList.Add((shootPos, shootDir * shotgun.Speed, entity));
-							}
-						}
-					}
-
-					ammo.IncreaseFromDelta(GameTime.DeltaTick);
+					projectiles.Add((shootPos, shootDir * Speed));
 				}
 			}
-
-			protected override JobHandle OnActionUpdate(JobHandle jobHandle)
-			{
-				return new Job
-				{
-					GameTime              = GetSingleton<GameTimeComponent>().ToGameTime(),
-					TransformFromEntity   = GetComponentDataFromEntity<LocalToWorld>(),
-					AimLookFromEntity     = GetComponentDataFromEntity<AimLookState>(),
-					EyePositionFromEntity = GetComponentDataFromEntity<EyePosition>(),
-
-					CreateProjectileList = World.GetExistingSystem<ProShotgunProjectile.Provider>().GetEntityDelayedList()
-				}.Schedule(this, jobHandle);
-			}
 		}
 
-		public class Provider : SystemProvider
+		public struct Create
 		{
-			public override void GetComponents(out ComponentType[] entityComponents, out ComponentType[] excludedStreamerComponents)
+			public int    Slot;
+			public Entity Owner;
+		}
+
+		public class Provider : BaseProviderBatch<Create>
+		{
+			public override void GetComponents(out ComponentType[] entityComponents)
 			{
-				excludedStreamerComponents = null;
 				entityComponents = new ComponentType[]
 				{
 					typeof(ActionDescription),
-					typeof(ActionTag),
 					typeof(StActionSlotInput),
 					typeof(ProShotgunAction),
 					typeof(ActionAmmo),
 					typeof(ActionSlot),
 					typeof(ActionCooldown),
-					typeof(GenerateEntitySnapshot)
 				};
 			}
 
-			public Entity SpawnLocal(Entity owner, int slot)
+			public override void SetEntityData(Entity entity, Create data)
 			{
-				var action = SpawnLocal();
+				EntityManager.ReplaceOwnerData(entity, data.Owner);
 
-				var c = EntityManager.GetComponentTypes(action);
-				foreach (var component in c)
+				EntityManager.SetComponentData(entity, new ActionSlot(data.Slot));
+				EntityManager.SetComponentData(entity, new ActionCooldown(0, 500));
+				EntityManager.SetComponentData(entity, new ActionAmmo(1, 2)
 				{
-					Debug.Log(component.GetManagedType().Name);
-				}
-				c.Dispose();
-
-				EntityManager.ReplaceOwnerData(action, owner);
-
-				EntityManager.SetComponentData(action, new ActionSlot(slot));
-				EntityManager.SetComponentData(action, new ActionCooldown(0, 600));
-				EntityManager.SetComponentData(action, new ActionAmmo(1500, 3000));
-				EntityManager.SetComponentData(action, new ProShotgunAction
+					IsEnergyBased  = false,
+					ReloadPerRound = true,
+					TimeToReload   = GameTime.Convert(1.1f)
+				});
+				EntityManager.SetComponentData(entity, new ProShotgunAction
 				{
 					SpawnSettings = new ProProjectile.Settings
 					{
-						damageRadius = 1.5f,
-						bumpRadius   = 1.6f,
-						detectRadius = 0.1f,
+						damageRadius = 0.25f,
+						bumpRadius   = 0.33f,
+						detectRadius = 0.2f,
 
-						damage = 4,
+						damage = 2,
 
 						bumpForce  = new float3(8),
 						bounciness = new float3(1, 1, 1),
@@ -137,10 +82,8 @@ namespace Stormium.Default.Kits.ProKit.ProShotgun
 					},
 					Speed       = 200f,
 					Pattern     = new int2(5, 5),
-					PatternSize = 2.75f
+					PatternSize = 2f
 				});
-
-				return action;
 			}
 		}
 	}
