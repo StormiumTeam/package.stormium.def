@@ -1,4 +1,3 @@
-using package.StormiumTeam.GameBase;
 using Stormium.Core;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
@@ -28,7 +27,7 @@ namespace Scripts.ActionBase
 		[RequireComponentTag(typeof(ActionAutomatic))]
 		private struct ProcessJob : IJobForEachWithEntity<TAction, ActionAmmo, ActionCooldown, StActionSlotInput, Owner>
 		{
-			public GameTime GameTime;
+			public UTick Tick;
 
 			[ReadOnly] public ComponentDataFromEntity<LocalToWorld> TransformFromEntity;
 			[ReadOnly] public ComponentDataFromEntity<EyePosition>  EyePositionFromEntity;
@@ -44,10 +43,10 @@ namespace Scripts.ActionBase
 			                    ref Owner             owner)
 			{
 				if (input.IsActive
-				    && cooldown.CooldownFinished(GameTime.Tick)
+				    && cooldown.CooldownFinished(Tick)
 				    && ammo.Value >= ammo.Usage)
 				{
-					cooldown.StartTick = GameTime.Tick;
+					cooldown.StartTick = Tick;
 					ammo.IncreaseFromDelta(-ammo.Usage);
 
 					var sh = new ActionShootHelper(TransformFromEntity[owner.Target], EyePositionFromEntity[owner.Target], AimLookFromEntity[owner.Target]);
@@ -55,7 +54,7 @@ namespace Scripts.ActionBase
 					FillJob.Shoot(default, action, owner.Target, sh);
 				}
 
-				ammo.IncreaseFromDelta(GameTime.DeltaTick);
+				ammo.IncreaseFromDelta(Tick.DeltaMs);
 			}
 		}
 
@@ -88,7 +87,7 @@ namespace Scripts.ActionBase
 
 			jobHandle = new ProcessJob
 			{
-				GameTime = GetSingleton<GameTimeComponent>().Value,
+				Tick = ServerSimulationSystemGroup.GetTick(),
 
 				TransformFromEntity   = GetComponentDataFromEntity<LocalToWorld>(),
 				EyePositionFromEntity = GetComponentDataFromEntity<EyePosition>(),

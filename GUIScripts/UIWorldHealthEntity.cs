@@ -36,7 +36,7 @@ namespace GUIScripts
 		private void OnBeginCameraRendering(ScriptableRenderContext ctx, Camera obj)
 		{
 			var camTransform = obj.transform;
-			
+
 			transform.LookAt(transform.position + camTransform.rotation * Vector3.forward, camTransform.rotation * Vector3.up);
 		}
 

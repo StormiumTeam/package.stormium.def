@@ -1,3 +1,4 @@
+using StormiumTeam.GameBase;
 using UnityEngine;
 
 namespace Graphics.Weapons.Rocket
@@ -5,8 +6,8 @@ namespace Graphics.Weapons.Rocket
 	public class RocketProjectileExplosion : MonoBehaviour
 	{
 		public AsyncAssetPool<GameObject> ParentPool;
-		public Animator Animator;
-		
+		public Animator                   Animator;
+
 		public void DoReset()
 		{
 			Animator.enabled = false;

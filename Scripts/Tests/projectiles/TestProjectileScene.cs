@@ -1,12 +1,11 @@
 using package.stormiumteam.shared;
-using package.StormiumTeam.GameBase;
+using Revolution.NetCode;
 using Stormium.Core;
-using Stormium.Default.Kits.ProKit.ProGrenade;
-using Stormium.Default.Kits.ProKit.ProMortar;
 using Stormium.Default.Kits.ProKit.ProShotgun;
 using Stormium.Default.States;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
+using StormiumTeam.Shared.Gen;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -23,14 +22,15 @@ namespace Stormium.Default.Tests.projectiles
 		GrenadeMortar,
 		Shotgun
 	}
-	
+
 	public struct TestProjectileId : IComponentData
 	{
 		public ProjectileToTest Value;
 	}
-	
+
 	public struct TestProjectileSceneTag : IComponentData
-	{}
+	{
+	}
 
 	public struct TestProjectileSceneData : IComponentData
 	{
@@ -48,7 +48,7 @@ namespace Stormium.Default.Tests.projectiles
 		{
 			// Player
 			var player = dstManager.CreateEntity(typeof(GamePlayer), typeof(PlayerDescription), typeof(GamePlayerActionCommand));
-			dstManager.SetComponentData(player, new GamePlayer(0, true));
+			dstManager.SetComponentData(player, new GamePlayer(0));
 
 			// Character
 			var masterEntity = dstManager.CreateEntity(typeof(TestProjectileSceneTag),
@@ -81,7 +81,7 @@ namespace Stormium.Default.Tests.projectiles
 			{
 				using (var entities = new NativeList<Entity>(1, Allocator.TempJob))
 				{
-					var provider = dstManager.World.GetExistingSystem<TProvider>();
+					var provider = dstManager.World.GetOrCreateSystem<TProvider>();
 					provider.SpawnLocalEntityWithArguments(create, entities);
 
 					dstManager.AddComponentData(entities[0], new TestProjectileId {Value = projectileToTest});
@@ -105,6 +105,7 @@ namespace Stormium.Default.Tests.projectiles
 				MovableEntity = masterEntity
 			});
 
+			Debug.Log(dstManager.World);
 
 			dstManager.SetName(entity, $"TestProjectile > Singleton Scene Data ({entity})");
 			dstManager.SetName(player, $"TestProjectile > Player ({player})");
@@ -113,13 +114,30 @@ namespace Stormium.Default.Tests.projectiles
 		}
 	}
 
+	[UpdateInGroup(typeof(ClientAndServerSimulationSystemGroup))]
 	public class TestProjectileSystem : ComponentSystem, INativeEventOnGUI
 	{
+		private EntityQuery m_UpdateAimQuery;
+		private EntityQuery m_RemoveDisableQuery;
+		private EntityQuery m_SetDisableQuery;
+
 		protected override void OnCreateManager()
 		{
 			base.OnCreateManager();
 
 			World.GetOrCreateSystem<AppEventSystem>().SubscribeToAll(this);
+
+			m_UpdateAimQuery = GetEntityQuery(typeof(TestProjectileSceneTag), typeof(LocalToWorld), typeof(AimLookState));
+			m_RemoveDisableQuery = GetEntityQuery(new EntityQueryDesc
+			{
+				All = new ComponentType[]
+				{
+					typeof(Disabled),
+					typeof(TestProjectileId)
+				},
+				Options = EntityQueryOptions.IncludeDisabled
+			});
+			m_SetDisableQuery = GetEntityQuery(typeof(TestProjectileId));
 		}
 
 		protected override void OnUpdate()
@@ -133,30 +151,27 @@ namespace Stormium.Default.Tests.projectiles
 
 			SetSingleton(sceneData);
 
-			Entities.WithAll<TestProjectileSceneTag>().ForEach((Entity entity, ref LocalToWorld localToWorld, ref AimLookState aimLookState) =>
+			LocalToWorld     ltw          = default;
+			AimLookState     aimLook      = default;
+			TestProjectileId projectileId = default;
+
+			foreach (var _ in this.ToEnumerator_DD(m_UpdateAimQuery, ref ltw, ref aimLook))
 			{
-				var eulerAngles = Quaternion.LookRotation(localToWorld.Forward).eulerAngles;
+				var eulerAngles = Quaternion.LookRotation(ltw.Forward).eulerAngles;
+				aimLook.Aim = new float2(eulerAngles.y, -eulerAngles.x);
+			}
 
-				aimLookState.Aim = new float2(eulerAngles.y, -eulerAngles.x);
-			});
-
-			Entities.WithAll<Disabled>().With(EntityQueryOptions.IncludeDisabled).ForEach((Entity entity, ref TestProjectileId projectileId) =>
+			foreach (var (i, entity) in this.ToEnumerator_D(m_RemoveDisableQuery, ref projectileId))
 			{
 				if (projectileId.Value == sceneData.Projectile)
 					PostUpdateCommands.RemoveComponent<Disabled>(entity);
-			});
+			}
 
-			Entities.ForEach((Entity entity, ref TestProjectileId projectileId) =>
+			foreach (var (i, entity) in this.ToEnumerator_D(m_SetDisableQuery, ref projectileId))
 			{
 				if (projectileId.Value != sceneData.Projectile)
 					PostUpdateCommands.AddComponent(entity, new Disabled());
-			});
-		}
-
-		private bool Has<T>(Entity e)
-			where T : struct, IComponentData
-		{
-			return EntityManager.HasComponent<T>(e);
+			}
 		}
 
 		public void NativeOnGUI()
@@ -164,12 +179,12 @@ namespace Stormium.Default.Tests.projectiles
 			GUILayout.Space(10);
 
 			GUI.contentColor = Color.white;
-			GUI.color = Color.white;
-			
+			GUI.color        = Color.white;
+
 			var style = new GUIStyle(GUI.skin.label) {active = {textColor = Color.white}};
 
 			GUILayout.FlexibleSpace();
-			
+
 			using (new GUILayout.VerticalScope())
 			{
 				GUILayout.Label("Current Weapon [" + GetSingleton<TestProjectileSceneData>().Projectile + "]", style);

@@ -1,17 +1,14 @@
 using System;
-using System.Collections.Generic;
+using Revolution.NetCode;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
-using StormiumTeam.Shared.Gen;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.NetCode;
 using Unity.Physics;
 using Unity.Transforms;
-using UnityEngine;
 
 namespace Scripts.Bumpers
 {
@@ -24,10 +21,15 @@ namespace Scripts.Bumpers
 	}
 
 	[InternalBufferCapacity(16)]
-	public struct LaunchPadCooldown : IBufferElementData
+	public struct LaunchPadCooldown : IBufferElementData, IEquatable<Entity>
 	{
 		public Entity Target;
-		public int    RemoveAtTick;
+		public UTick  RemoveAtTick;
+
+		public bool Equals(Entity entity)
+		{
+			return Target == entity;
+		}
 	}
 
 	[UpdateInGroup(typeof(ServerSimulationSystemGroup))]
@@ -36,7 +38,7 @@ namespace Scripts.Bumpers
 		[BurstCompile]
 		private struct Job : IJobForEachWithEntity<LocalToWorld, LaunchPad, PhysicsCollider>
 		{
-			[ReadOnly] public int Tick;
+			[ReadOnly] public UTick Tick;
 
 			[ReadOnly] public NativeArray<ArchetypeChunk>                  MovableChunks;
 			[ReadOnly] public ArchetypeChunkEntityType                     EntityType;
@@ -99,7 +101,7 @@ namespace Scripts.Bumpers
 					return;
 
 				for (var chk = 0; chk != MovableChunks.Length; chk++)
-				{
+				{	
 					var movableEntityArray    = MovableChunks[chk].GetNativeArray(EntityType);
 					var movableTransformArray = MovableChunks[chk].GetNativeArray(LocalToWorldType);
 					var movableColliderArray  = MovableChunks[chk].GetNativeArray(PhysicsColliderType);
@@ -107,17 +109,7 @@ namespace Scripts.Bumpers
 					var count = MovableChunks[chk].Count;
 					for (var ent = 0; ent != count; ent++)
 					{
-						var ctn = false;
-						for (var c = 0; c != cooldownBuffer.Length; c++)
-						{
-							if (cooldownBuffer[c].Target != movableEntityArray[ent])
-								continue;
-
-							ctn = true;
-							break;
-						}
-
-						if (ctn)
+						if (cooldownBuffer.AsNativeArray().Contains(movableEntityArray[ent]))
 							continue;
 
 						if (Bump
@@ -126,7 +118,7 @@ namespace Scripts.Bumpers
 							movableEntityArray[ent], movableTransformArray[ent], movableColliderArray[ent]
 						))
 						{
-							cooldownBuffer.Add(new LaunchPadCooldown {Target = movableEntityArray[ent], RemoveAtTick = Tick + GameTime.Convert(100)});
+							cooldownBuffer.Add(new LaunchPadCooldown {Target = movableEntityArray[ent], RemoveAtTick = UTick.AddMs(Tick, 100)});
 						}
 					}
 				}
@@ -142,8 +134,8 @@ namespace Scripts.Bumpers
 		{
 			base.OnCreate();
 
-			m_LaunchPadQuery = GetEntityQuery(typeof(LocalToWorld), typeof(LaunchPad));
-			m_MovableQuery   = GetEntityQuery(typeof(LocalToWorld), typeof(MovableDescription));
+			m_LaunchPadQuery = GetEntityQuery(typeof(LocalToWorld), typeof(LaunchPad), typeof(PhysicsCollider));
+			m_MovableQuery   = GetEntityQuery(typeof(LocalToWorld), typeof(MovableDescription), typeof(PhysicsCollider));
 
 			m_TargetImpulseEventProvider = World.GetOrCreateSystem<TargetImpulseEvent.Provider>();
 		}
@@ -155,7 +147,7 @@ namespace Scripts.Bumpers
 			var movableChunks = m_MovableQuery.CreateArchetypeChunkArray(Allocator.TempJob, out var dependency);
 			inputDeps = new Job
 			{
-				Tick = GameTime.Tick,
+				Tick = ServerSimulationSystemGroup.GetTick(),
 
 				MovableChunks       = movableChunks,
 				EntityType          = GetArchetypeChunkEntityType(),

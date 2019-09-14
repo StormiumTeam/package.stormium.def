@@ -1,6 +1,6 @@
-using Runtime.BaseSystems;
-using Stormium.Default.States;
+using StormiumTeam.GameBase.BaseSystems;
 using StormiumTeam.GameBase.Components;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -37,6 +37,7 @@ namespace StormiumTeam.GameBase
 			public EntityCommandBuffer.Concurrent Ecb;
 			public EntityArchetype                ModifyHealthArchetype;
 
+			[ReadOnly]
 			public ComponentDataFromEntity<Relative<TeamDescription>> TeamOwnerFromEntity;
 
 			public void Execute(Entity entity, int index, ref TargetDamageEvent damageEvent)

@@ -1,16 +1,9 @@
-using System;
-using Runtime.BaseSystems;
 using Stormium.Core;
 using StormiumTeam.GameBase;
-using StormiumTeam.GameBase.Components;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
+using StormiumTeam.GameBase.BaseSystems;
 using Unity.Entities;
-using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
-using UnityEngine;
-using Ray = Unity.Physics.Ray;
 
 namespace Scripts.Gamemodes.TestMode
 {

@@ -1,6 +1,7 @@
 using Stormium.Core;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
+using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -15,9 +16,7 @@ namespace package.stormium.def.Kits.ProKit
                 camModifier.Position = transform.position + new Vector3(0.0f, 1.6f, 0.0f);
 
                 var aim = new float3(-aimLook.Aim.y, aimLook.Aim.x, 0);
-
-                var playerData = EntityManager.GetComponentData<GamePlayer>(player.Target);
-                if (playerData.IsSelf)
+                if (EntityManager.HasComponent(player.Target, ComponentType.ReadWrite<GamePlayerLocalTag>()))
                 {
                     var basicUserCommand = EntityManager.GetComponentData<GamePlayerUserCommand>(player.Target);
                     aim.x = basicUserCommand.Look.x;

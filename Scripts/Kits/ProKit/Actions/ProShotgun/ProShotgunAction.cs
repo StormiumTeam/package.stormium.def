@@ -1,14 +1,8 @@
-using package.stormiumteam.networking.runtime.lowlevel;
-using package.StormiumTeam.GameBase;
-using Scripts.ActionBase;
 using Stormium.Core;
 using StormiumTeam.GameBase;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.Transforms;
-using UnityEngine;
 
 namespace Stormium.Default.Kits.ProKit.ProShotgun
 {
@@ -59,12 +53,12 @@ namespace Stormium.Default.Kits.ProKit.ProShotgun
 				EntityManager.ReplaceOwnerData(entity, data.Owner);
 
 				EntityManager.SetComponentData(entity, new ActionSlot(data.Slot));
-				EntityManager.SetComponentData(entity, new ActionCooldown(0, 500));
+				EntityManager.SetComponentData(entity, new ActionCooldown(default, 500));
 				EntityManager.SetComponentData(entity, new ActionAmmo(1, 2)
 				{
 					IsEnergyBased  = false,
 					ReloadPerRound = true,
-					TimeToReload   = GameTime.Convert(1.1f)
+					TimeToReload   = 1_100
 				});
 				EntityManager.SetComponentData(entity, new ProShotgunAction
 				{

@@ -5,11 +5,11 @@ using UnityEngine;
 
 namespace Graphics.Weapons
 {
-	public class MortarProjectilePresentation : CustomAsyncAssetPresentation<MortarProjectilePresentation>
+	public class MortarProjectilePresentation : RuntimeAssetPresentation<MortarProjectilePresentation>
 	{
 	}
 
-	public class MortarProjectileBackend : CustomAsyncAsset<MortarProjectilePresentation>
+	public class MortarProjectileBackend : RuntimeAssetBackend<MortarProjectilePresentation>
 	{
 	}
 

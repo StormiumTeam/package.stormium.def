@@ -4,11 +4,11 @@ using StormiumTeam.GameBase;
 using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
-using UnityEngine.Experimental.VFX;
+using UnityEngine.VFX;
 
 namespace Graphics.Weapons.Rocket
 {
-	public class RocketProjectilePresentation : CustomAsyncAssetPresentation<RocketProjectilePresentation>
+	public class RocketProjectilePresentation : RuntimeAssetPresentation<RocketProjectilePresentation>
 	{
 		public VisualEffect   trailVisualEffect;
 		public AudioClip      fireSound;
@@ -16,7 +16,7 @@ namespace Graphics.Weapons.Rocket
 		public Animator       animator;
 	}
 
-	public class RocketProjectileBackend : CustomAsyncAsset<RocketProjectilePresentation>
+	public class RocketProjectileBackend : RuntimeAssetBackend<RocketProjectilePresentation>
 	{
 
 		public float                   startTime;
@@ -28,11 +28,11 @@ namespace Graphics.Weapons.Rocket
 
 		public override void OnReset()
 		{
-			startTime = 0;
-			offset = float3.zero;
-			hasExploded = false;
-			hasBeenAwake = false;
-			previousPhase = StandardProjectilePhase.None;
+			startTime           = 0;
+			offset              = float3.zero;
+			hasExploded         = false;
+			hasBeenAwake        = false;
+			previousPhase       = StandardProjectilePhase.None;
 			stopEffectNextFrame = false;
 		}
 	}
@@ -40,13 +40,13 @@ namespace Graphics.Weapons.Rocket
 	public class VisualRocketProjectileSystem : VisualProjectileSystemBase<ProRocketProjectile, RocketProjectilePresentation, RocketProjectileBackend>
 	{
 		public AsyncAssetPool<GameObject> ExplosionPool;
-		
+
 		protected override string PresentationAssetId => "Stormium.Default.ProKit.Projectile.Rocket";
 
 		protected override void SetPools()
 		{
 			base.SetPools();
-			
+
 			ExplosionPool = new AsyncAssetPool<GameObject>("Stormium.Default.ProKit.Projectile.Rocket.Explosion");
 		}
 
@@ -97,15 +97,16 @@ namespace Graphics.Weapons.Rocket
 					{
 						ExplosionPool.Dequeue((op) =>
 						{
-							op.Result.SetActive(true);
-							op.Result.transform.up = projectileState.explodeNormalHit;
-							op.Result.transform.position = localToWorld.Position;
-							op.Result.GetComponent<RocketProjectileExplosion>().ParentPool = ExplosionPool;
-							op.Result.GetComponent<RocketProjectileExplosion>().DoReset();
-							op.Result.GetComponent<RocketProjectileExplosion>().StartAnimation();
+							op.SetActive(true);
+							op.transform.up       = projectileState.explodeNormalHit;
+							op.transform.position = localToWorld.Position;
+
+							op.GetComponent<RocketProjectileExplosion>().ParentPool = ExplosionPool;
+							op.GetComponent<RocketProjectileExplosion>().DoReset();
+							op.GetComponent<RocketProjectileExplosion>().StartAnimation();
 						});
 					}
-					
+
 					presentation.trailVisualEffect.SetFloat("time", Time.time - backend.startTime);
 
 					backend.previousPhase = projectileState.phase;
@@ -121,7 +122,7 @@ namespace Graphics.Weapons.Rocket
 					var lpProgress = math.clamp(math.abs(Time.time - backend.startTime) * 0.9f, 0, 1);
 
 					backend.offset = math.lerp(backend.offset, 0, lpProgress);
-					tr.position = localToWorld.Position + backend.offset;
+					tr.position    = localToWorld.Position + backend.offset;
 				}
 			});
 		}

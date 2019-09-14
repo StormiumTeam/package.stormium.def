@@ -1,4 +1,5 @@
 using System;
+using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -27,13 +28,13 @@ namespace package.stormium.def.Kits.ProKit
 
         public int    AirTime;
         public bool   ForceUnground;
-        public long   WallBounceTick;
+        public UTick  LastWallBounce;
         public float  AirControl;
         public float3 LastMove;
 
         public bool   IsSliding;
         public float3 SlideNormal;
-        public int    LastWallDodge;
+        public UTick    LastWallDodge;
     }
 
     public struct AirTime : IComponentData

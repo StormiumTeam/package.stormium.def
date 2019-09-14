@@ -25,7 +25,7 @@ namespace Stormium.Default.Kits.ProKit.ProShotgun
 				{
 					var s = 1.25f;
 
-					velocity.Value = math.lerp(velocity.Value, 0, GetSingleton<GameTimeComponent>().DeltaTime * s);
+					velocity.Value = math.lerp(velocity.Value, 0, ServerTick.Delta * s);
 				});
 			}
 		}
@@ -41,12 +41,10 @@ namespace Stormium.Default.Kits.ProKit.ProShotgun
 
 			public override void SetEntityData(Entity entity, Create data)
 			{
-				var tick = GetSingleton<GameTimeComponent>().Tick;
-
 				EntityManager.SetComponentData(entity, new Translation {Value                   = data.Position});
 				EntityManager.SetComponentData(entity, new Velocity {Value                      = data.Velocity});
 				EntityManager.SetComponentData(entity, new ProProjectile.Settings {detectRadius = 0.1f, damageRadius                      = 0.11f, damage = 4});
-				EntityManager.SetComponentData(entity, new ProProjectile.PredictedState {phase  = StandardProjectilePhase.Active, endTick = tick + 145});
+				EntityManager.SetComponentData(entity, new ProProjectile.PredictedState {phase  = StandardProjectilePhase.Active, endTick = ServerTick.AddMs(1000)});
 				EntityManager.ReplaceOwnerData(entity, data.Owner);
 
 				EntityManager.AddComponentData(entity, new DebugRenderSphere {CastShadows = true, ReceiveShadows = true, Color = Color.yellow});

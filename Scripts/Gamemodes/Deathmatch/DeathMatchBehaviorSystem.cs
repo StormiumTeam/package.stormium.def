@@ -1,4 +1,4 @@
-using package.stormiumteam.networking.runtime.lowlevel;
+using GmMachine;
 using Stormium.Core;
 using StormiumTeam.GameBase;
 using Unity.Collections;
@@ -6,14 +6,24 @@ using Unity.Entities;
 
 namespace Stormium.Default.GameModes
 {
-    public struct DeathMatchData : IComponentData
+    public struct DeathMatchData : IComponentData, IGameMode
     {
         public int MaxFrag;
     }
     
-    public partial class DeathMatchBehaviorSystem : GameModeSystem
+    public partial class DeathMatchBehaviorSystem : GameModeAsyncSystem<DeathMatchData>
     {
         private EntityQuery m_SimulatedGameModes;
+
+        protected override void OnCreateMachine(ref Machine machine)
+        {
+            
+        }
+
+        protected override void OnLoop(Entity gameModeEntity)
+        {
+            Machine.Update();
+        }
 
         protected override void OnCreate()
         {

@@ -1,12 +1,3 @@
-using package.stormiumteam.networking.runtime.lowlevel;
-using package.stormiumteam.shared;
-using StandardAssets.Characters.Physics;
-using Stormium.Default.States;
-using StormiumTeam.GameBase;
-using Unity.Collections;
-using Unity.Entities;
-using UnityEngine;
-
 namespace GUIScripts
 {
 	// todo: use rpc?

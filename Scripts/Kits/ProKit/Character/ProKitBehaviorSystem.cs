@@ -1,11 +1,11 @@
 using System;
-using System.Collections.Generic;
 using StandardAssets.Characters.Physics;
 using Stormium.Core;
 using Stormium.Default.Kits.ProKit;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
 using StormiumTeam.GameBase.Data;
+using StormiumTeam.Shared.Gen;
 using Unity.Entities;
 using UnityEngine;
 
@@ -17,6 +17,8 @@ namespace package.stormium.def.Kits.ProKit
     {
         private EntityQuery m_CharacterMovementAuthorityGroup;
         private EntityQuery m_CharacterMovementPredictionGroup;
+
+        private EntityQuery m_InputFromPlayerQuery;
 
         protected override void OnCreate()
         {
@@ -34,7 +36,7 @@ namespace package.stormium.def.Kits.ProKit
                 ComponentType.ReadWrite<LivableHealth>(),
                 ComponentType.Exclude<DeactivateMovement>()
             );
-            
+
             m_CharacterMovementPredictionGroup = GetEntityQuery
             (
                 ComponentType.ReadWrite<ProKitMovementSettings>(),
@@ -45,12 +47,17 @@ namespace package.stormium.def.Kits.ProKit
                 ComponentType.ReadWrite<OpenCharacterController>(),
                 ComponentType.Exclude<DeactivateMovement>()
             );
+
+            m_InputFromPlayerQuery = GetEntityQuery(typeof(ProKitInputState), typeof(AimLookState), typeof(Relative<PlayerDescription>));
         }
 
         protected override void OnUpdate()
         {
-            UpdateInputsFromOwners();
+            // TODO....
+            return;
             
+            UpdateInputsFromOwners();
+
             // Simulate rotation from AimLook component
             SimulateRotations();
             // Simulate standard SRT movements (Run, Dodge, Jump, etc...)
@@ -61,33 +68,36 @@ namespace package.stormium.def.Kits.ProKit
 
         private void UpdateInputsFromOwners()
         {
-            Entities.ForEach((Entity entity, ref ProKitInputState inputState, ref AimLookState aimLook) =>
+            ProKitInputState            inputState     = default;
+            AimLookState                aimLook        = default;
+            Relative<PlayerDescription> playerRelative = default;
+
+            foreach (var _ in this.ToEnumerator_DDD(m_InputFromPlayerQuery, ref inputState, ref aimLook, ref playerRelative))
             {
-                if (!EntityManager.HasComponent<Relative<PlayerDescription>>(entity))
+                if (!EntityManager.HasComponent<GamePlayerUserCommand>(playerRelative.Target))
                     return;
 
-                var owner = EntityManager.GetComponentData<Relative<PlayerDescription>>(entity).Target;
-                if (!EntityManager.HasComponent<GamePlayerUserCommand>(owner))
-                    return;
+                var commands = EntityManager.GetComponentData<GamePlayerUserCommand>(playerRelative.Target);
 
-                var commands = EntityManager.GetComponentData<GamePlayerUserCommand>(owner);
-
-                inputState.Movement = commands.Move;
-                inputState.QueueJump = Convert.ToByte(commands.QueueJump);
+                inputState.Movement   = commands.Move;
+                inputState.QueueJump  = Convert.ToByte(commands.QueueJump);
                 inputState.QueueDodge = Convert.ToByte(commands.QueueDodge);
-                aimLook.Aim         = commands.Look;
+                aimLook.Aim           = commands.Look;
 
-                if (commands.IsJumping) inputState.QueueJump = 2;
+                if (commands.IsJumping) inputState.QueueJump  = 2;
                 if (commands.IsDodging) inputState.QueueDodge = 2;
-            });
+            }
         }
 
         private void SimulateRotations()
         {
-            Entities.With(m_CharacterMovementAuthorityGroup).ForEach((OpenCharacterController controller, ref AimLookState aimLook) =>
+            OpenCharacterController openCharacterController = default;
+            AimLookState            aimLook                 = default;
+
+            foreach (var _ in this.ToEnumerator_CD(m_CharacterMovementAuthorityGroup, ref openCharacterController, ref aimLook))
             {
-                controller.transform.rotation = Quaternion.Euler(0, aimLook.Aim.x, 0);
-            });
+                openCharacterController.transform.rotation = Quaternion.Euler(0, aimLook.Aim.x, 0);
+            }
         }
     }
 }

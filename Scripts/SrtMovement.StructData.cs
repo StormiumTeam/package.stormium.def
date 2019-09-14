@@ -26,7 +26,7 @@ namespace package.stormium.def
         ///  The default friction on a surface (Recommanded Value: 6f)
         /// </summary>
         public float SurfaceFriction;
-
+ 
         public float DecayBaseSpeedFriction;
 
         /// <summary>
@@ -56,7 +56,7 @@ namespace package.stormium.def
                 FrictionSpeedMin = 12f,
                 FrictionSpeedMax = 25f,
 
-                FrictionMin = 0.25f,
+                FrictionMin = 0.25f, 
                 FrictionMax = 1f,
 
                 SurfaceFriction        = 50f,

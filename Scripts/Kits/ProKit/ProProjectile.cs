@@ -1,8 +1,8 @@
 using System;
-using Runtime.Systems;
-using Runtime.Systems.Filters;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
+using StormiumTeam.GameBase.Filters;
+using StormiumTeam.GameBase.Systems;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -10,10 +10,11 @@ using Unity.Jobs;
 using Unity.Physics;
 using Unity.Physics.Systems;
 using Unity.Transforms;
+using UnityEngine;
 using static Unity.Mathematics.math;
+using Collider = Unity.Physics.Collider;
 using float3 = Unity.Mathematics.float3;
 using quaternion = Unity.Mathematics.quaternion;
-using Ray = Unity.Physics.Ray;
 using RaycastHit = Unity.Physics.RaycastHit;
 using SphereCollider = Unity.Physics.SphereCollider;
 
@@ -52,8 +53,8 @@ namespace Stormium.Default.Kits.ProKit
 		{
 			public StandardProjectilePhase   phase;
 			public StandardProjectileEndType endType;
-			public int                       endTick;
-			public int                       hitTick;
+			public UTick                     endTick;
+			public UTick                     hitTick;
 			public int                       bounce;
 			public float3                    explodeNormalHit;
 
@@ -103,7 +104,7 @@ namespace Stormium.Default.Kits.ProKit
 		[BurstCompile]
 		private struct Job : IJobForEachWithEntity<ProProjectile.Settings, ProProjectile.PredictedState, Translation, Velocity>
 		{
-			public GameTimeComponent              Time;
+			public UTick                          Tick;
 			public EntityCommandBuffer.Concurrent Ecb;
 
 			public void Execute(Entity entity, int idx, [ReadOnly] ref ProProjectile.Settings settings, ref ProProjectile.PredictedState state, ref Translation translation, ref Velocity velocity)
@@ -111,7 +112,7 @@ namespace Stormium.Default.Kits.ProKit
 				if (state.phase == StandardProjectilePhase.Ended)
 				{
 					// We give a small delay so clients can receive the explode effect
-					if (state.endTick + 1000 > Time.Tick)
+					if (UTick.MsToTickNextFrame(state.endTick, 1000) > Tick)
 						return;
 
 					Ecb.DestroyEntity(idx, entity);
@@ -121,7 +122,7 @@ namespace Stormium.Default.Kits.ProKit
 				if (settings.manualPhysicSimulation)
 					return;
 
-				velocity.Value += settings.gravity * Time.DeltaTime;
+				velocity.Value += settings.gravity * Tick.Delta;
 			}
 		}
 
@@ -136,14 +137,14 @@ namespace Stormium.Default.Kits.ProKit
 			m_Query      = GetEntityQuery(typeof(ProProjectile.Settings), typeof(ProProjectile.PredictedState), typeof(Translation), typeof(Velocity));
 			m_EndBarrier = World.GetOrCreateSystem<EndProjectileEntityCommandBufferSystem>();
 		}
-		
+
 		protected override JobHandle OnUpdate(JobHandle inputDeps)
 		{
-			inputDeps = JobForEachExtensions.Schedule(new Job
+			inputDeps = new Job
 			{
-				Time = GetSingleton<GameTimeComponent>(),
+				Tick = ServerSimulationSystemGroup.GetTick(),
 				Ecb  = m_EndBarrier.CreateCommandBuffer().ToConcurrent()
-			}, m_Query, inputDeps);
+			}.Schedule(m_Query, inputDeps);
 
 			m_EndBarrier.AddJobHandleForProducer(inputDeps);
 
@@ -157,9 +158,7 @@ namespace Stormium.Default.Kits.ProKit
 		[BurstCompile]
 		struct Job : IJobForEachWithEntity<ProProjectile.Settings, ProProjectile.PredictedState, Translation, Velocity>
 		{
-			public GameTimeComponent Time;
-
-			public JobPhysicsQuery SphereQuery;
+			public UTick Tick;
 
 			[NativeDisableParallelForRestriction]
 			public BufferFromEntity<CollideWith> CollideWithFromEntity;
@@ -174,25 +173,19 @@ namespace Stormium.Default.Kits.ProKit
 				if (state.phase != StandardProjectilePhase.Active || settings.manualPhysicSimulation)
 					return;
 
-				var targetPosition = translation.Value + velocity.Value * Time.DeltaTime;
+				var targetPosition = translation.Value + velocity.Value * Tick.Delta;
 
 				// first, make a standard check on static collider / rigidBodies
+				var finalScanRadius = max(settings.detectRadius, 0.0001f);
+				var scanSphere      = SphereCollider.Create(new SphereGeometry {Radius = finalScanRadius});
 				var castInput = new ColliderCastInput
 				{
-					Collider    = SphereQuery.Ptr,
+					Collider    = (Collider*) scanSphere.GetUnsafePtr(),
 					Start       = translation.Value,
-					End         = translation.Value + velocity.Value * Time.DeltaTime,
+					End         = translation.Value + velocity.Value * Tick.Delta,
 					Orientation = quaternion.identity
 				};
 
-				var sphereCollider = (SphereCollider*) SphereQuery.Ptr;
-				sphereCollider->Radius = max(settings.detectRadius, 0.0001f);
-				sphereCollider->Filter = new CollisionFilter
-				{
-					GroupIndex   = 0,
-					BelongsTo    = CollisionFilter.Default.BelongsTo,
-					CollidesWith = CollisionFilter.Default.CollidesWith
-				};
 				NativeArray<int> filter = default;
 				if (CollideWithFromEntity.Exists(entity))
 				{
@@ -210,7 +203,7 @@ namespace Stormium.Default.Kits.ProKit
 						continue;
 
 					targetPosition         = closestHitCollector.ClosestHit.Position;
-					state.hitTick          = Time.Tick;
+					state.hitTick          = Tick;
 					state.explodeNormalHit = closestHitCollector.ClosestHit.SurfaceNormal;
 
 					var hit           = closestHitCollector.ClosestHit;
@@ -222,7 +215,7 @@ namespace Stormium.Default.Kits.ProKit
 					if (isEnvironment && settings.maxBounce > 0 && lengthsq(hit.SurfaceNormal) > 0 && hit.Fraction >= 0.0f)
 					{
 						velocity.Value =  reflect(velocity.Value, hit.SurfaceNormal) * settings.bounciness;
-						targetPosition += hit.SurfaceNormal * (sphereCollider->Radius);
+						targetPosition += hit.SurfaceNormal * finalScanRadius;
 
 						state.bounce++;
 					}
@@ -239,13 +232,13 @@ namespace Stormium.Default.Kits.ProKit
 						state.phase   = StandardProjectilePhase.Ended;
 						state.endType = StandardProjectileEndType.Collision;
 
-						state.endTick = Time.Tick;
+						state.endTick = Tick;
 					}
 
 					break;
 				}
 
-				if (state.phase == StandardProjectilePhase.Active && state.endTick > 0 && state.endTick <= Time.Tick)
+				if (state.phase == StandardProjectilePhase.Active && state.endTick > 0 && state.endTick <= Tick)
 				{
 					state.phase   = StandardProjectilePhase.Ended;
 					state.endType = StandardProjectileEndType.Lifetime;
@@ -255,10 +248,10 @@ namespace Stormium.Default.Kits.ProKit
 					state.startDamageEvent = true;
 
 				translation.Value = targetPosition;
+				scanSphere.Dispose();
 			}
 		}
 
-		public JobPhysicsQuery SphereQuery;
 		public EntityQuery     FilterQuery;
 		public EntityQuery     ProjectileQuery;
 
@@ -266,7 +259,6 @@ namespace Stormium.Default.Kits.ProKit
 		{
 			base.OnCreate();
 
-			SphereQuery = new JobPhysicsQuery(() => SphereCollider.Create(0, 0.01f, CollisionFilter.Default));
 			FilterQuery = GetEntityQuery(typeof(ProProjectile.Settings), typeof(ProProjectile.PredictedState), typeof(Velocity), typeof(Translation), typeof(CollideWith));
 
 			// one without CW..
@@ -278,11 +270,10 @@ namespace Stormium.Default.Kits.ProKit
 			inputDeps = World.GetExistingSystem<CollisionFilterSystemGroup>().Filter(FilterQuery, inputDeps);
 			inputDeps = JobForEachExtensions.Schedule(new Job
 			{
-				Time                     = GetSingleton<GameTimeComponent>(),
+				Tick                     = ServerSimulationSystemGroup.GetTick(),
 				CollideWithFromEntity    = GetBufferFromEntity<CollideWith>(),
 				EnvironmentTagFromEntity = GetComponentDataFromEntity<EnvironmentTag>(),
 				PhysicsWorld             = World.GetExistingSystem<BuildPhysicsWorld>().PhysicsWorld,
-				SphereQuery              = SphereQuery
 			}, ProjectileQuery, inputDeps);
 
 			return inputDeps;
@@ -356,32 +347,6 @@ namespace Stormium.Default.Kits.ProKit
 						});
 					}
 				}
-
-				/*for (var i = 0; i != LivableChunks.Length; i++)
-				{
-					var livableChunk = LivableChunks[i];
-					var localToWorldArray = livableChunk.GetNativeArray<LocalToWorld>();
-					var physicsVelocityArray = livableChunk.GetNativeArray<PhysicsVelocity>();
-					var legacyVelocityArray = livableChunk.GetNativeArray<Velocity>();
-					var count = livableChunk.Count;
-
-					for (var entityIndex = 0; entityIndex != count; entityIndex++)
-					{
-						var position = localToWorldArray[entityIndex].Position;
-						ref var pv = ref UnsafeUtilityEx.ArrayElementAsRef<PhysicsVelocity>(physicsVelocityArray.GetUnsafePtr(), entityIndex);
-						ref var lv = ref UnsafeUtilityEx.ArrayElementAsRef<Velocity>(legacyVelocityArray.GetUnsafePtr(), entityIndex);
-						
-						if (livableChunk.Has<PhysicsVelocity>())
-						{
-							pv.Linear -= ;
-						}
-
-						if (livableChunk.Has<Velocity>())
-						{
-							lv.Value -= ;
-						}
-					}
-				}*/
 			}
 		}
 

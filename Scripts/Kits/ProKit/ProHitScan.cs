@@ -31,7 +31,7 @@ namespace Stormium.Default.Kits.ProKit
 		public struct PredictedState : IComponentData
 		{
 			public StandardProjectilePhase phase;
-			public int                     explodeTick;
+			public UTick                   explodeTick;
 			public int                     bounce;
 			public float3                  explodePosition;
 		}
@@ -63,12 +63,8 @@ namespace Stormium.Default.Kits.ProKit
 		[BurstCompile]
 		private unsafe struct JobPhysicIteration : IJobForEachWithEntity<ProHitScan.Settings, ProHitScan.PredictedState, Translation, Velocity>
 		{
-			public GameTime                       Time;
+			public UTick                          Tick;
 			public EntityCommandBuffer.Concurrent Ecb;
-
-			public JobPhysicsQuery JobSphereScanCast;
-			public JobPhysicsQuery JobSphereDamageCast;
-			public JobPhysicsQuery JobSphereBumpCast;
 
 			public BufferFromEntity<CustomCollide> CwBufferFromEntity;
 
@@ -90,7 +86,7 @@ namespace Stormium.Default.Kits.ProKit
 				if (state.phase != StandardProjectilePhase.Active)
 				{
 					// We give a small delay so clients can receive the explode effect
-					if (state.explodeTick + 1000 > Time.Tick)
+					if (Tick < UTick.AddMsNextFrame(state.explodeTick, 1000))
 						return;
 
 					Ecb.DestroyEntity(index, entity);
@@ -98,15 +94,13 @@ namespace Stormium.Default.Kits.ProKit
 				}
 
 				// we prepare the sphere cast for the scanning
-				var sphereCollider = (SphereCollider*) JobSphereScanCast.Ptr;
-				sphereCollider->Radius = max(settings.scanRadius, 0.01f);
-
+				var scanSphere = SphereCollider.Create(new SphereGeometry {Radius = max(settings.scanRadius, 0.01f)});
 				var scanning = new ColliderCastInput
 				{
-					Collider    = (Collider*) sphereCollider,
-					Direction   = normalizesafe(velocity.Value) * settings.scanDistance,
+					Collider    = (Collider*) scanSphere.GetUnsafePtr(),
 					Orientation = quaternion.identity,
-					Position    = translation.Value
+					Start       = translation.Value,
+					End         = translation.Value + (normalizesafe(velocity.Value) * settings.scanDistance)
 				};
 
 				Entity hitEntity = default;
@@ -125,7 +119,7 @@ namespace Stormium.Default.Kits.ProKit
 				}
 
 				// this is a hitscan projectile, so no matter what, it will explode
-				state.explodeTick = Time.Tick;
+				state.explodeTick = Tick;
 				state.phase       = StandardProjectilePhase.Ended;
 
 				if (hitEntity == default)
@@ -133,24 +127,21 @@ namespace Stormium.Default.Kits.ProKit
 
 				var scanLivableCast = new ColliderCastInput
 				{
-					Position    = translation.Value,
+					Start       = translation.Value,
 					Orientation = quaternion.identity,
-					Direction   = hitInfo.Position - translation.Value
+					End         = translation.Value + (hitInfo.Position - translation.Value)
 				};
 
 				// prepare cast sphere first....
-				var damageSphere = (SphereCollider*) JobSphereDamageCast.Ptr;
-				damageSphere->Radius = max(settings.damage, 0.0f);
-
-				var bumpSphere = (SphereCollider*) JobSphereBumpCast.Ptr;
-				bumpSphere->Radius = max(settings.bumpRadius, 0.0f);
+				var damageSphere = SphereCollider.Create(new SphereGeometry {Radius = max(settings.damage, 0.0f)});
+				var bumpSphere   = SphereCollider.Create(new SphereGeometry {Radius = max(settings.bumpRadius, 0.0f)});
 
 				// prepare the distance inputs...
 				var damageCastInput = scanLivableCast;
-				damageCastInput.Collider = (Collider*) damageSphere;
+				damageCastInput.Collider = (Collider*) damageSphere.GetUnsafePtr();
 
 				var bumpCastInput = scanLivableCast;
-				bumpCastInput.Collider = (Collider*) bumpSphere;
+				bumpCastInput.Collider = (Collider*) bumpSphere.GetUnsafePtr();
 
 				var enumerator = CollideLivableChunks.GetEnumerator();
 				while (enumerator.MoveNext())
@@ -198,11 +189,13 @@ namespace Stormium.Default.Kits.ProKit
 					}
 				}
 
+				scanSphere.Dispose();
+				damageSphere.Dispose();
+				bumpSphere.Dispose();
 				enumerator.Dispose();
 			}
 		}
 
-		private JobPhysicsQuery m_JobSphereScanCast, m_JobSphereDamageCast, m_JobSphereBumpCast;
 		private EntityQuery     m_ProjectileGroup;
 		private EntityQuery     m_CollideLivableGroup;
 
@@ -214,11 +207,7 @@ namespace Stormium.Default.Kits.ProKit
 		protected override void OnCreate()
 		{
 			base.OnCreate();
-
-			m_JobSphereScanCast   = new JobPhysicsQuery(() => SphereCollider.Create(float3(0), 0.1f));
-			m_JobSphereDamageCast = new JobPhysicsQuery(() => SphereCollider.Create(float3(0), 0.1f));
-			m_JobSphereBumpCast   = new JobPhysicsQuery(() => SphereCollider.Create(float3(0), 0.1f));
-
+			
 			m_ProjectileGroup = GetEntityQuery
 			(
 				new EntityQueryDesc
@@ -240,7 +229,7 @@ namespace Stormium.Default.Kits.ProKit
 				{
 					All = new[]
 					{
-						ComponentType.ReadOnly<ColliderDescription>(),
+						ComponentType.ReadOnly<HitShapeDescription>(),
 						ComponentType.ReadOnly<Owner>(),
 						ComponentType.ReadOnly<LocalToWorld>(),
 						ComponentType.ReadOnly<PhysicsCollider>(),
@@ -259,12 +248,9 @@ namespace Stormium.Default.Kits.ProKit
 
 			var job = new JobPhysicIteration
 			{
-				Time                = GetSingleton<GameTimeComponent>().Value,
+				Tick                = ServerSimulationSystemGroup.GetTick(),
 				CwBufferFromEntity  = GetBufferFromEntity<CustomCollide>(),
 				Ecb                 = m_EndBarrier.CreateCommandBuffer().ToConcurrent(),
-				JobSphereScanCast   = m_JobSphereScanCast,
-				JobSphereDamageCast = m_JobSphereDamageCast,
-				JobSphereBumpCast   = m_JobSphereBumpCast,
 
 				DamageEventSpawnList  = m_DamageEventProvider.GetEntityDelayedList(),
 				ImpulseEventSpawnList = m_ImpulseEventProvider.GetEntityDelayedList(),

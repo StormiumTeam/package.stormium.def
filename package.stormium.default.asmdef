@@ -1,5 +1,5 @@
 {
-    "name": "package.stormium.default",
+    "name": "Stormium.Default",
     "references": [
         "Unity.Addressables",
         "Unity.ResourceManager",
@@ -10,6 +10,8 @@
         "package.stormium.core",
         "package.stormiumteam.networking",
         "package.stormiumteam.inputs",
+        "Revolution.Snapshot",
+        "Revolution.NetCode",
         "Unity.NetCode",
         "Unity.InputSystem",
         "Unity.Entities",

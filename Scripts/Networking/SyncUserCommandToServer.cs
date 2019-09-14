@@ -16,7 +16,6 @@ namespace Scripts.Networking
             if (m_GameManager.GameType == GameType.Server)
                 return;
 
-            var serverMgr = m_GameManager.ServerManager;
         }
     }
 }

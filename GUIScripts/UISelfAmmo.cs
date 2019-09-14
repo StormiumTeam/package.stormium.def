@@ -1,5 +1,5 @@
-using package.StormiumTeam.GameBase;
 using Stormium.Default.NexG;
+using StormiumTeam.GameBase;
 using TMPro;
 using Unity.Entities;
 using UnityEngine;

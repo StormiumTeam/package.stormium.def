@@ -1,6 +1,5 @@
 using package.stormium.def;
 using package.stormium.def.Kits.ProKit;
-using package.StormiumTeam.GameBase;
 using Stormium.Default.Tests;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
@@ -38,7 +37,7 @@ namespace Stormium.Default.GameModes
         {
             const Allocator allocator = Allocator.TempJob;
 
-            var length = CreateCharacterForPlayerGroup.CalculateLength();
+            var length = CreateCharacterForPlayerGroup.CalculateEntityCount();
 
             using (var entityArray = CreateCharacterForPlayerGroup.ToEntityArray(allocator))
             using (var playerArray = CreateCharacterForPlayerGroup.ToComponentDataArray<DeathMatchPlayer>(allocator))
@@ -70,25 +69,27 @@ namespace Stormium.Default.GameModes
             Entities.ForEach((Entity entity, Transform transform, ref DeathMatchCharacter character, ref LivableHealth health, ref Velocity velocity) =>
             {
                 // Unspawn him
-                if (health.Value <= 0 && character.NextRespawn == default)
+                if (health.Value <= 0 && health.ShouldBeDead())
                 {
-                    velocity.Value = float3.zero;
-                    character.NextRespawn = GameTime.Tick + GameTime.Convert(2.5f);
+                    velocity.Value        = float3.zero;
+                    character.NextRespawn = UTick.AddMsNextFrame(ServerTick, 2500);
+
+                    health.IsDead = true;
                 }
 
-                if (character.NextRespawn != default && character.NextRespawn < GameTime.Tick)
+                if (health.IsDead && character.NextRespawn < ServerTick)
                 {
                     var tempSpawns = SpawnGroup.ToEntityArray(Allocator.TempJob);
-                    var spawn = EntityManager.GetComponentObject<DeathMatchSpawn>(tempSpawns[Random.Range(0, tempSpawns.Length)]);
-                    
+                    var spawn      = EntityManager.GetComponentObject<DeathMatchSpawn>(tempSpawns[Random.Range(0, tempSpawns.Length)]);
+
                     tempSpawns.Dispose();
                     
-                    character.NextRespawn = default;
-                    transform.position = spawn.transform.position;
+                    transform.position    = spawn.transform.position;
 
                     var healthEvent = PostUpdateCommands.CreateEntity();
-                    
                     PostUpdateCommands.AddComponent(healthEvent, new ModifyHealthEvent(ModifyHealthType.SetMax, 0, entity));
+
+                    health.IsDead = false;
                 }
             });
         }

@@ -1,19 +1,20 @@
+using StormiumTeam.GameBase;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 
 namespace Graphics.Weapons
 {
+	public struct VisualProjectileComponentState : IComponentData
+	{
+		public int PoolIdx;
+	}
+
 	public abstract class VisualProjectileSystemBase<TProjectile, TPresentation, TBackend> : ComponentSystem
 		where TProjectile : struct, IComponentData
-		where TPresentation : CustomAsyncAssetPresentation<TPresentation>
-		where TBackend : CustomAsyncAsset<TPresentation>
+		where TPresentation : RuntimeAssetPresentation<TPresentation>
+		where TBackend : RuntimeAssetBackend<TPresentation>
 	{
-		public struct ComponentState : IComponentData
-		{
-			public int PoolIdx;
-		}
-
 		protected AsyncAssetPool<GameObject> PresentationPool;
 		protected AssetPool<GameObject>      BackendPool;
 
@@ -25,17 +26,15 @@ namespace Graphics.Weapons
 		protected virtual void SetPools()
 		{
 			PresentationPool = new AsyncAssetPool<GameObject>(PresentationAssetId);
-			BackendPool      = new AssetPool<GameObject>(SetBackendGameObjectCreation);
-		}
+			BackendPool = new AssetPool<GameObject>((pool) =>
+			{
+				var go = new GameObject("Disabled " + GetType(), typeof(GameObjectEntity), typeof(TBackend));
+				go.SetActive(false);
 
-		protected virtual GameObject SetBackendGameObjectCreation()
-		{
-			var go = new GameObject("Disabled " + GetType(), typeof(GameObjectEntity), typeof(TBackend));
-			go.SetActive(false);
+				go.GetComponent<TBackend>().SetRootPool(pool);
 
-			go.GetComponent<TBackend>().SetRootPool(BackendPool);
-
-			return go;
+				return go;
+			}, World);
 		}
 
 		protected virtual void SetQueries()
@@ -43,7 +42,7 @@ namespace Graphics.Weapons
 			QueryWithoutState = GetEntityQuery(new EntityQueryDesc
 			{
 				All  = new ComponentType[] {typeof(TProjectile)},
-				None = new ComponentType[] {typeof(ComponentState)}
+				None = new ComponentType[] {typeof(VisualProjectileComponentState)}
 			});
 			QueryBackend = GetEntityQuery(new EntityQueryDesc
 			{
@@ -63,7 +62,7 @@ namespace Graphics.Weapons
 		{
 			var entities = QueryWithoutState.ToEntityArray(Allocator.TempJob);
 
-			EntityManager.AddComponent(QueryWithoutState, typeof(ComponentState));
+			EntityManager.AddComponent(QueryWithoutState, typeof(VisualProjectileComponentState));
 			foreach (var entity in entities)
 			{
 				var backendGameObject = BackendPool.Dequeue();
@@ -72,9 +71,10 @@ namespace Graphics.Weapons
 
 				var backend = backendGameObject.GetComponent<TBackend>();
 				backend.OnReset();
-				backend.SetFromPool(PresentationPool, EntityManager, entity);
+				backend.SetTarget(EntityManager, entity);
+				backend.SetPresentationFromPool(PresentationPool);
 
-				EntityManager.SetComponentData(entity, new ComponentState {PoolIdx = BackendPool.IndexOf(backendGameObject)});
+				EntityManager.SetComponentData(entity, new VisualProjectileComponentState {PoolIdx = BackendPool.IndexOf(backendGameObject)});
 			}
 
 			entities.Dispose();

@@ -8,7 +8,6 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
-using UnityEngine.Profiling;
 
 namespace Stormium.Default
 {
@@ -94,7 +93,6 @@ namespace Stormium.Default
 
             if (cameraEntity == default || camera == null)
             {
-                Debug.LogError("No Game Camera found?");
                 return;
             }
 

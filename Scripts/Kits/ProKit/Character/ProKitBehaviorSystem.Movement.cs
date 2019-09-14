@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using StormiumTeam.GameBase;
 using StandardAssets.Characters.Physics;
 using StormiumTeam.GameBase.Components;
@@ -34,7 +33,7 @@ namespace package.stormium.def.Kits.ProKit
                 if (health.Value <= 0)
                     return;
 
-                var time         = GetSingleton<GameTimeComponent>();
+                var tick         = GetTick(true);
                 var transform    = controller.transform;
                 var position     = transform.position;
                 var rotation     = transform.rotation;
@@ -42,21 +41,21 @@ namespace package.stormium.def.Kits.ProKit
                 var directionFwd = SrtMovement.ComputeDirectionFwd(transform.forward, rotation, inputState.Movement);
                 var leftFwd      = SrtMovement.ComputeDirectionFwd(transform.forward, rotation, new float2(-1, inputState.Movement.y));
                 var rightFwd     = SrtMovement.ComputeDirectionFwd(transform.forward, rotation, new float2(1, inputState.Movement.y));
-                
+
                 var startedFromGround = controller.isGrounded && !movementState.ForceUnground;
 
                 movementState.ForceUnground = false;
-                
+
                 // Fix the velocity in case.
                 velocity.Value = SrtMovement.SrtFixNaN(velocity.Value);
 
                 var groundTime          = math.max(-movementState.AirTime, 0);
                 var canJump             = startedFromGround && !controller.startedSlide && inputState.QueueJump >= 1; // todo: queue jump instead
-                var canChainJump = canJump && movementState.AirTime - GameTime.DeltaTick >= 100;
+                var canChainJump        = canJump && movementState.AirTime - tick.DeltaMs >= 100;
                 var canDodge            = startedFromGround && !controller.startedSlide && inputState.QueueDodge >= 1 && !canJump && groundTime > 100;
                 var canGroundRun        = startedFromGround && !canJump && !canDodge;
                 var canAerialRun        = !startedFromGround;
-                var canWallBounce       = canAerialRun && (inputState.QueueJump == 2 || inputState.QueueDodge == 2) && movementState.WallBounceTick + 250 < GameTime.Tick;
+                var canWallBounce       = canAerialRun && (inputState.QueueJump == 2 || inputState.QueueDodge == 2) && UTick.MsToTickNextFrame(movementState.LastWallBounce, 250) < tick;
                 var canMakeSlideActions = Mouse.current.forwardButton.isPressed;
                 var canSlide            = canMakeSlideActions && math.length(velocity.Value.xz) > movementSettings.GroundSettings.BaseSpeed;
                 var canCrouch           = canGroundRun && canMakeSlideActions && !canSlide;
@@ -69,26 +68,26 @@ namespace package.stormium.def.Kits.ProKit
 
                     if (!canJump)
                     {
-                        movementState.AirTime = math.min(movementState.AirTime - GameTime.DeltaTick, 0);
+                        movementState.AirTime = math.min(movementState.AirTime - tick.DeltaMs, 0);
                     }
 
                     movementState.AirControl = 1.0f;
                 }
                 else
                 {
-                    if (movementState.LastWallDodge <= 0 || movementState.LastWallDodge + 98 < GameTime.Tick)
+                    if (UTick.MsToTickNextFrame(movementState.LastWallDodge, 100) < tick)
                     {
-                        velocity.Value.y -= 18f * time.DeltaTime;
+                        velocity.Value.y -= 18f * tick.DeltaMs;
                     }
                     else
-                    { 
+                    {
                         velocity.Value.y = math.max(velocity.Value.y, 0);
                     }
 
-                    velocity.Value.x =  Mathf.Lerp(velocity.Value.x, 0.0f, time.DeltaTime * 0.05f);
-                    velocity.Value.z =  Mathf.Lerp(velocity.Value.z, 0.0f, time.DeltaTime * 0.05f);
+                    velocity.Value.x = Mathf.Lerp(velocity.Value.x, 0.0f, tick.Delta * 0.05f);
+                    velocity.Value.z = Mathf.Lerp(velocity.Value.z, 0.0f, tick.Delta * 0.05f);
 
-                    movementState.AirTime = math.max(movementState.AirTime + GameTime.DeltaTick, 0);
+                    movementState.AirTime = math.max(movementState.AirTime + tick.DeltaMs, 0);
                 }
 
                 // The sliding algorithm.
@@ -103,8 +102,8 @@ namespace package.stormium.def.Kits.ProKit
 
                     var speed = math.length(velocity.Value.zyx);
 
-                    velocity.Value = math.lerp(velocity.Value, math.normalizesafe(math.normalizesafe(velocity.Value.xyz) + directionFwd) * speed, time.DeltaTime * 4);
-                    velocity.Value = math.lerp(velocity.Value, float3.zero, time.DeltaTime * 0.25f);
+                    velocity.Value = math.lerp(velocity.Value, math.normalizesafe(math.normalizesafe(velocity.Value.xyz) + directionFwd) * speed, tick.Delta * 4);
+                    velocity.Value = math.lerp(velocity.Value, float3.zero, tick.Delta * 0.25f);
                     canGroundRun   = false;
                 }
                 else
@@ -123,7 +122,7 @@ namespace package.stormium.def.Kits.ProKit
                         settings.SprintSpeed =  settings.BaseSpeed;
                     }
 
-                    velocity.Value = SrtMovement.GroundMove(velocity.Value, inputState.Movement, direction, settings, time.DeltaTime);
+                    velocity.Value = SrtMovement.GroundMove(velocity.Value, inputState.Movement, direction, settings, tick.Delta);
                 }
 
                 // -------------------------------------------------------- //
@@ -134,7 +133,7 @@ namespace package.stormium.def.Kits.ProKit
                     var airSettings = movementSettings.AerialSettings;
                     airSettings.Control *= control * movementState.AirControl;
 
-                    velocity.Value = SrtMovement.AerialMove(velocity.Value, direction, airSettings, time.DeltaTime);
+                    velocity.Value = SrtMovement.AerialMove(velocity.Value, direction, airSettings, tick.Delta);
                 }
 
                 // -------------------------------------------------------- //
@@ -142,7 +141,7 @@ namespace package.stormium.def.Kits.ProKit
                 if (canJump)
                 {
                     movementState.LastSpecialMovement = ProKitMovementState.ESpecialMovement.Jump;
-                    
+
                     var strafeAngle = SrtMovement.GetStrafeAngleNormalized(direction, math.float3(velocity.Value.x, 0, velocity.Value.z));
                     velocity.Value += direction * (strafeAngle * 0.5f);
 
@@ -151,7 +150,7 @@ namespace package.stormium.def.Kits.ProKit
                     if (canChainJump)
                         verticalPower *= 0.75f;
                     verticalPower += math.max(movementState.LastMove.y * 0.25f, 0.0f);
-                    
+
                     // TODO: Queue a new jump (For now, we don't queue it, we do it now)
                     velocity.Value.y = verticalPower;
                 }
@@ -205,7 +204,7 @@ namespace package.stormium.def.Kits.ProKit
                 if (canWallBounce)
                 {
                     Debug.Log("wallbounce!");
-                    
+
                     // SHOULD BE REDONE.
                     var collisionFlags = controller.Move(directionFwd * 0.3f) | controller.Move(leftFwd * 0.3f) | controller.Move(rightFwd * 0.3f);
                     if ((collisionFlags & CollisionFlags.Sides) != 0)
@@ -222,12 +221,12 @@ namespace package.stormium.def.Kits.ProKit
 
                             normal = c.Data.normal;
                         }*/
-                        
-                        var dodge = inputState.QueueDodge == 2;
+
+                        var dodge               = inputState.QueueDodge == 2;
                         var normalFwdAngleSin   = math.dot(directionFwd, RayUtility.SlideVelocityNoYChange(velocity.Value, normal).normalized);
                         var normalFwdAngleCosSq = 1 - normalFwdAngleSin * normalFwdAngleSin;
-                        var maxAngleCosine  = math.cos(0.46f);
-                        
+                        var maxAngleCosine      = math.cos(0.46f);
+
                         Debug.Log($"sin({normalFwdAngleSin:F4})");
 
                         // wall jump (we don't want the player to walljump directly after a dodge)
@@ -240,10 +239,10 @@ namespace package.stormium.def.Kits.ProKit
 
                             velocity.Value =  RayUtility.SlideVelocityNoYChange(velocity.Value, normal);
                             velocity.Value += (float3) (bounce);
-                            
-                            movementState.WallBounceTick =  GameTime.Tick;
+
+                            movementState.LastWallBounce =  tick;
                             movementState.AirControl     *= 0.5f;
-                            
+
                             movementState.LastSpecialMovement = ProKitMovementState.ESpecialMovement.WallJump;
                         }
                         // wall dodge
@@ -261,10 +260,10 @@ namespace package.stormium.def.Kits.ProKit
 
                             controller.Move(velocity.normalized * (velocity.speed * 0.1f));
 
-                            movementState.WallBounceTick =  GameTime.Tick;
+                            movementState.LastWallBounce =  tick;
                             movementState.AirControl     *= 0.1f;
-                            movementState.LastWallDodge = GameTime.Tick;
-                            
+                            movementState.LastWallDodge  =  tick;
+
                             movementState.LastSpecialMovement = ProKitMovementState.ESpecialMovement.WallDodge;
                         }
                     }
@@ -276,7 +275,7 @@ namespace package.stormium.def.Kits.ProKit
                 var avY   = velocity.Value.y;
 
                 Profiler.BeginSample("Move()");
-                var move = velocity.Value * time.DeltaTime;
+                var move = velocity.Value * tick.Delta;
 
                 if (canSlide)
                 {
@@ -289,7 +288,7 @@ namespace package.stormium.def.Kits.ProKit
 
                 var finalFlags = controller.Move(move);
                 controller.CallUpdate();
-                movementState.LastMove = (transform.position - avPos) / time.DeltaTime;
+                movementState.LastMove = (transform.position - avPos) / tick.Delta;
                 if ((finalFlags & CollisionFlags.Above) != 0)
                 {
                     avY = math.min(velocity.Value.y, 0.0f);

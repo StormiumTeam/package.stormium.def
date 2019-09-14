@@ -1,15 +1,8 @@
 using package.stormium.def.Kits.ProKit;
-using package.stormiumteam.networking.runtime.lowlevel;
-using package.stormiumteam.shared;
-using StandardAssets.Characters.Physics;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
 using StormiumTeam.GameBase.Data;
 using Unity.Entities;
-using Unity.Jobs;
-using Unity.Mathematics;
-using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace Stormium.Default.Tests
 {

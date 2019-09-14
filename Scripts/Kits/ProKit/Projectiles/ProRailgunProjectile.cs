@@ -1,5 +1,4 @@
 using System.Linq;
-using package.StormiumTeam.GameBase;
 using StormiumTeam.GameBase;
 using Stormium.Default.Kits.ProKit;
 using Unity.Entities;
@@ -32,12 +31,10 @@ namespace Scripts.Actions.ProRailgun
 
 			public override void SetEntityData(Entity entity, Create data)
 			{
-				var tick = GetSingleton<GameTimeComponent>().Tick;
-
 				EntityManager.SetComponentData(entity, new Translation {Value                   = data.Position});
 				EntityManager.SetComponentData(entity, new Velocity {Value                      = data.Direction});
 				EntityManager.SetComponentData(entity, new ProProjectile.Settings {detectRadius = 0.1f, damageRadius                      = 0.11f, damage = 4});
-				EntityManager.SetComponentData(entity, new ProProjectile.PredictedState {phase  = StandardProjectilePhase.Active, endTick = tick + 145});
+				EntityManager.SetComponentData(entity, new ProProjectile.PredictedState {phase  = StandardProjectilePhase.Active, endTick = UTick.AddMsNextFrame(ServerTick, 100)});
 				EntityManager.ReplaceOwnerData(entity, data.Owner);
 			}
 		}

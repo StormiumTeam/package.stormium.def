@@ -2,7 +2,6 @@ using Stormium.Default.States;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
 using StormiumTeam.Shared.Gen;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -11,7 +10,7 @@ using UnityEngine;
 namespace Scripts
 {
     [UpdateInGroup(typeof(PresentationSystemGroup))]
-    public class UpdateCameraFreeMove : ComponentSystem
+    public class UpdateCameraFreeMove : GameBaseSystem
     {
         private EntityQuery m_Query;
 
@@ -22,7 +21,7 @@ namespace Scripts
 
         protected override void OnUpdate()
         {
-            var deltaTime = GetSingleton<GameTimeComponent>().DeltaTime;
+            var deltaTime = ServerTick.Delta;
 
             var nMove = math.normalizesafe(new float2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")));
 
@@ -62,6 +61,10 @@ namespace Scripts
                         Rotation    = rotation.Value
                     });
                 }
+
+                freeMove.PreviousJet     = jet;
+                freeMove.PreviousMove    = move;
+                freeMove.PreviousAimLook = look;
             }
         }
 
