@@ -1,5 +1,5 @@
 {
-    "name": "Stormium.Default",
+    "name": "Stormium.Default.Server",
     "references": [
         "Unity.Addressables",
         "Unity.ResourceManager",
@@ -10,6 +10,8 @@
         "package.stormium.core",
         "package.stormiumteam.networking",
         "package.stormiumteam.inputs",
+        "Stormium.Default.Mixed",
+        "Unity.Networking.Transport",
         "Revolution.Snapshot",
         "Revolution.NetCode",
         "Unity.NetCode",
