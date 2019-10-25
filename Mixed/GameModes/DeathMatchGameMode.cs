@@ -11,16 +11,19 @@ namespace Stormium.Default.Mixed.GameModes
 		{
 		}
 
-		public int PointsToWin;
+		public int  PointsToWin;
+		public int TimeLimit;
 
 		public void WriteTo(DataStreamWriter writer, ref DeathMatchGameMode baseline, DefaultSetup setup, SerializeClientData jobData)
 		{
-			writer.WritePackedIntDelta(PointsToWin, baseline.PointsToWin, jobData.NetworkCompressionModel);
+			writer.WritePackedInt(PointsToWin, jobData.NetworkCompressionModel);
+			writer.WritePackedInt(TimeLimit, jobData.NetworkCompressionModel);
 		}
 
 		public void ReadFrom(ref DataStreamReader.Context ctx, DataStreamReader reader, ref DeathMatchGameMode baseline, DeserializeClientData jobData)
 		{
-			PointsToWin = reader.ReadPackedIntDelta(ref ctx, baseline.PointsToWin, jobData.NetworkCompressionModel);
+			PointsToWin = reader.ReadPackedInt(ref ctx, jobData.NetworkCompressionModel);
+			TimeLimit     = reader.ReadPackedInt(ref ctx, jobData.NetworkCompressionModel);
 		}
 
 		public class Synchronize : MixedComponentSnapshotSystem<DeathMatchGameMode, DefaultSetup>

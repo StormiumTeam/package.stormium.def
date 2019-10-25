@@ -1,6 +1,7 @@
 {
     "name": "Stormium.Default.Client",
     "references": [
+        "Noesis.Gui",
         "Unity.Addressables",
         "Unity.ResourceManager",
         "Unity.RenderPipelines.HighDefinition.Runtime",
@@ -11,6 +12,7 @@
         "package.stormiumteam.networking",
         "package.stormiumteam.inputs",
         "Unity.Networking.Transport",
+        "Unity.UI.Runtime",
         "Stormium.Default.Mixed",
         "Revolution.Snapshot",
         "Revolution.NetCode",
@@ -23,17 +25,25 @@
         "Unity.Mathematics",
         "Unity.Collections",
         "Unity.Jobs",
+        "Unity.Rendering.Hybrid",
         "Unity.TextMeshPro",
         "Unity.Physics",
         "Unity.Burst",
         "Unity.ugui"
     ],
-    "optionalUnityReferences": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": true,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": []
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "noesis.gui",
+            "expression": "",
+            "define": "NOESIS"
+        }
+    ],
+    "noEngineReferences": false
 }

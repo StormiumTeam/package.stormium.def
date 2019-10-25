@@ -77,7 +77,7 @@ namespace package.stormium.def
                 settings.FrictionMin, settings.FrictionMax
             );
 
-            var velocity = ApplyFriction(initialVelocity, direction, friction, settings.SurfaceFriction, settings.Acceleration,
+            var velocity = ApplyFriction(initialVelocity, direction, friction, settings.SurfaceFriction, settings.FrictionSpeed, settings.Acceleration,
                 settings.Deacceleration, dt);
             var wishSpeed                         = math.length(direction) * settings.BaseSpeed;
             if (float.IsNaN(wishSpeed)) wishSpeed = 0;
@@ -95,7 +95,7 @@ namespace package.stormium.def
                 {
                     wishSpeed = settings.SprintSpeed;
 
-                    settings.Acceleration = 6f;
+                    settings.Acceleration = 3f;
                 }
             }
 
@@ -160,14 +160,14 @@ namespace package.stormium.def
         /// <param name="deaccel">The deaceleration of the player</param>
         /// <param name="dt">The delta time</param>
         /// <returns>Return a new velocity from the friction</returns>
-        public static float3 ApplyFriction(float3 velocity, float3 direction, float friction, float groundFriction, float accel, float deaccel, float dt)
+        public static float3 ApplyFriction(float3 velocity, float3 direction, float friction, float groundFriction, float maxSpeed, float accel, float deaccel, float dt)
         {
             direction = math.normalizesafe(direction);
 
             var frictioned   = Vector3.MoveTowards(velocity, Vector3.zero, dt * groundFriction * friction);
             var defrictioned = Vector3.Lerp(velocity, frictioned, (1 - math.length(direction)));
 
-            if (defrictioned.magnitude > 12)
+            if (defrictioned.magnitude > maxSpeed)
                 defrictioned = Vector3.MoveTowards(defrictioned, frictioned, dt * deaccel);
 
             velocity = defrictioned;

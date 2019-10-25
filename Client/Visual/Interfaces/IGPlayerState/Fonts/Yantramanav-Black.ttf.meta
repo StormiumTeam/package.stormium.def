@@ -1,0 +1,23 @@
+fileFormatVersion: 2
+guid: dc3a9fa225bcd3245bbba5c8f92172d1
+TrueTypeFontImporter:
+  externalObjects: {}
+  serializedVersion: 4
+  fontSize: 16
+  forceTextureCase: -2
+  characterSpacing: 0
+  characterPadding: 1
+  includeFontData: 1
+  fontName: Yantramanav
+  fontNames:
+  - Yantramanav
+  fallbackFontReferences:
+  - {fileID: 12800000, guid: 73ff6fd4113641044ad7fd103b077f09, type: 3}
+  customCharacters: 
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  useLegacyBoundsCalculation: 0
+  shouldRoundAdvanceValue: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

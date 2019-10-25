@@ -1,10 +1,11 @@
+using System;
 using Revolution;
 using Unity.Entities;
 using Unity.Networking.Transport;
 
 namespace DefaultNamespace
 {
-	public struct PlayerCharacter : IComponentData
+	public struct PlayerCharacter : IComponentData, IEquatable<PlayerCharacter>, IEquatable<Entity>
 	{
 		public Entity Character;
 
@@ -44,8 +45,24 @@ namespace DefaultNamespace
 		{
 			public override ComponentType ExcludeComponent => typeof(Exclude);
 		}
-		
+
 		public struct Exclude : IComponentData
-		{}
+		{
+		}
+
+		public bool Equals(PlayerCharacter other)
+		{
+			return other.Character.Equals(Character);
+		}
+
+		public bool Equals(Entity other)
+		{
+			return other.Equals(Character);
+		}
+
+		public override int GetHashCode()
+		{
+			return Character.GetHashCode();
+		}
 	}
 }

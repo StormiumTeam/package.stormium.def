@@ -1,0 +1,50 @@
+﻿<UserControl x:Class="IGPlayerState_blend.Unity.StaminaControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:IGPlayerState_blend"
+             mc:Ignorable="d" 
+             d:DesignHeight="100" d:DesignWidth="1000">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="100*"/>
+            <ColumnDefinition Width="0*"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Column="1" Foreground="White" FontSize="50" FontFamily="Fonts/#Yantramanav" Padding="20,5,15,5" HorizontalAlignment="Left" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5" Margin="0,0,-1000,0" Width="250">
+            <TextBlock.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform/>
+                    <SkewTransform AngleX="-15"/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </TextBlock.RenderTransform>
+            <Run Text="{Binding StaminaValue, FallbackValue=100}"/>
+            <Run Text="%"/>
+        </TextBlock>
+        <Rectangle Stroke="White" StrokeThickness="2" Grid.Column="0" Margin="0,35" RadiusX="5" RadiusY="5" RenderTransformOrigin="0.5,0.5" >
+            <Rectangle.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform/>
+                    <SkewTransform AngleX="-15"/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Rectangle.RenderTransform>
+        </Rectangle>
+        <Border x:Name="BorderQuad" Width="500" HorizontalAlignment="Left">
+            <Rectangle StrokeThickness="4" Grid.Column="0" Margin="10,29,7,43" Fill="White" RadiusX="5" RadiusY="5" RenderTransformOrigin="0.5,0.5" >
+                <Rectangle.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform/>
+                        <SkewTransform AngleX="-15"/>
+                        <RotateTransform/>
+                        <TranslateTransform/>
+                    </TransformGroup>
+                </Rectangle.RenderTransform>
+            </Rectangle>
+        </Border>
+    </Grid>
+</UserControl>

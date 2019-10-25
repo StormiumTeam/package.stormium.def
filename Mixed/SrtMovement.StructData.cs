@@ -46,6 +46,8 @@ namespace package.stormium.def
         /// </summary>
         public float BaseSpeed;
 
+        public float FrictionSpeed;
+
         /// <summary>
         /// The sprint speed (Recommanded value: 12f)
         /// </summary>
@@ -64,10 +66,10 @@ namespace package.stormium.def
                 SurfaceFriction        = 50f,
                 DecayBaseSpeedFriction = 8.5f,
 
-                Acceleration   = 75f,
+                Acceleration   = 50f,
                 Deacceleration = 17.5f,
                 BaseSpeed      = 8f,
-                SprintSpeed    = 11f,
+                SprintSpeed    = 10f,
             };
         }
     } 

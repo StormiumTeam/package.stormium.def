@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>7596a3fc-4371-4234-9a38-3b506ac5283a</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>IGDeathMatch</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)DeathMatchInterfaceControl.xaml.cs">
+      <DependentUpon>DeathMatchInterfaceControl.xaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="$(MSBuildThisFileDirectory)DeathMatchInterfaceControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)Fonts\bahnschrift.asset" />
+    <None Include="$(MSBuildThisFileDirectory)Fonts\bahnschrift.asset.meta" />
+    <None Include="$(MSBuildThisFileDirectory)Fonts\bahnschrift.ttf.meta" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="$(MSBuildThisFileDirectory)Fonts\bahnschrift.ttf">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Resource>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="$(MSBuildThisFileDirectory)Fonts\Cairo-Black.ttf" />
+    <Content Include="$(MSBuildThisFileDirectory)Fonts\Cairo-Bold.ttf" />
+    <Content Include="$(MSBuildThisFileDirectory)Fonts\Cairo-ExtraLight.ttf" />
+    <Content Include="$(MSBuildThisFileDirectory)Fonts\Cairo-Light.ttf" />
+    <Content Include="$(MSBuildThisFileDirectory)Fonts\Cairo-Regular.ttf" />
+    <Content Include="$(MSBuildThisFileDirectory)Fonts\Cairo-SemiBold.ttf" />
+  </ItemGroup>
+</Project>

@@ -18,52 +18,42 @@ namespace DefaultNamespace
             World.GetOrCreateSystem<SnapshotManager>().SetFixedSystemsFromBuilder((world, builder) =>
             {
                 var i = 1;
-                foreach (var type in GetTypes(typeof(ISystemDelegateForSnapshot), typeof(ComponentSystemBase))
-                    .OrderBy(t => t.FullName))
+                foreach (var type in GetTypes(typeof(ISystemDelegateForSnapshot), typeof(ComponentSystemBase)))
                 {
-                    Debug.Log($"{i}-snapshot:{type}");
                     builder.Add(world.GetOrCreateSystem(type));
                     i++;
                 }
 
-                foreach (var type in GetTypes(typeof(IEntityDescription), null)
-                    .OrderBy(t => t.FullName))
+                foreach (var type in GetTypes(typeof(IEntityDescription), null))
                 {
-                    Debug.Log($"{i}-snapshot:desc:{type}");
                     builder.Add(world.GetOrCreateSystem(typeof(ComponentSnapshotSystemTag<>).MakeGenericType(type)));
                     i++;
                 }
             });
             World.GetOrCreateSystem<RpcCollectionSystem>().SetFixedCollection((world, builder) =>
             {
-                foreach (var type in GetTypes(typeof(IRpcCommand), null)
-                    .OrderBy(t => t.FullName))
+                foreach (var type in GetTypes(typeof(IRpcCommand), null))
                 {
-                    Debug.Log($"rpc:{type}");
                     try
                     {
                         builder.Add((RpcProcessSystemBase) world.GetOrCreateSystem(typeof(DefaultRpcProcessSystem<>).MakeGenericType(type)));
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"Error at making {type}");
                         throw;
                     }
                 }
             });
             World.GetOrCreateSystem<CommandCollectionSystem>().SetFixedCollection((world, builder) =>
             {
-                foreach (var type in GetTypes(typeof(ICommandData<>), null)
-                    .OrderBy(t => t.FullName))
+                foreach (var type in GetTypes(typeof(ICommandData), null))
                 {
-                    Debug.Log($"cmd:{type}");
                     try
                     {
                         builder.Add((CommandProcessSystemBase) world.GetOrCreateSystem(typeof(DefaultCommandProcessSystem<>).MakeGenericType(type)));
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"Error at making {type}");
                         throw;
                     }
                 }
@@ -75,25 +65,34 @@ namespace DefaultNamespace
 
         }
 
+        private static List<Type> m_AssembliesTypes;
+
         private static IEnumerable<Type> GetTypes(Type interfaceType, Type subclass)
         {
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            var validAssemblies = new List<Assembly>();
-            foreach (var asm in assemblies)
+            if (m_AssembliesTypes == null)
             {
-                try
+                m_AssembliesTypes = new List<Type>(1024);
+
+                var assemblies      = AppDomain.CurrentDomain.GetAssemblies();
+                var validAssemblies = new List<Assembly>();
+                foreach (var asm in assemblies)
                 {
-                    asm.GetTypes();
-                    validAssemblies.Add(asm);
+                    try
+                    {
+                        var types = asm.GetTypes();
+                        validAssemblies.Add(asm);
+                        m_AssembliesTypes.AddRange(types);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"Error from assembly: {asm.FullName}");
+                    }
                 }
-                catch (Exception e)
-                {
-                    Debug.LogError($"Error from assembly: {asm.FullName}");
-                }
+
+                m_AssembliesTypes = m_AssembliesTypes.OrderBy(t => t.FullName).ToList();
             }
-            
-            return from asm in validAssemblies
-                   from type in asm.GetTypes()
+
+            return from type in m_AssembliesTypes
                    where type.HasInterface(interfaceType)
                          && (subclass == null || type.IsSubclassOf(subclass))
                          && !type.IsAbstract

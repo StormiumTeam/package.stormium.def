@@ -8,7 +8,8 @@ namespace Stormium.Default.Mixed
 	public struct LaunchPad : IComponentData
 	{
 		public float3 direction;
-		public float3 momentum;
+		public float3 worldMomentum;
+		public float3 localMomentum;
 		public float  force;
 	}
 }
