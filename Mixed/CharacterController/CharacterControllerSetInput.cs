@@ -90,6 +90,7 @@ namespace CharacterController
 	}
 
 	[UpdateInGroup(typeof(PredictionSimulationSystemGroup))]
+	[UpdateInWorld(WorldType.ServerWorld)]
 	public class CharacterControllerSetInput : GameBaseSystem
 	{
 		protected override void OnUpdate()

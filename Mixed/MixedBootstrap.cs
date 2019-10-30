@@ -32,11 +32,11 @@ namespace DefaultNamespace
             });
             World.GetOrCreateSystem<RpcCollectionSystem>().SetFixedCollection((world, builder) =>
             {
-                foreach (var type in GetTypes(typeof(IRpcCommand), null))
+                foreach (var type in GetTypes(typeof(IRpcCommandRequestComponentData), null))
                 {
                     try
                     {
-                        builder.Add((RpcProcessSystemBase) world.GetOrCreateSystem(typeof(DefaultRpcProcessSystem<>).MakeGenericType(type)));
+                        builder.Add((RpcProcessSystemBase) world.GetOrCreateSystem(typeof(RpcCommandRequest<>).MakeGenericType(type)));
                     }
                     catch (Exception ex)
                     {

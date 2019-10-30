@@ -77,7 +77,7 @@ namespace package.stormium.def
     public struct SrtAerialSettings
     {
         /// <summary>
-        ///  The acceleration speed (Recommanded value: 14f)
+        ///  The acceleration speed (Recommanded value: 14f)           
         /// </summary>
         public float Acceleration;
 

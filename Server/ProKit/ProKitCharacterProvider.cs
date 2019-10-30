@@ -68,7 +68,7 @@ namespace ProKit
 				Settings             = SrtAerialSettings.NewBase(),
 				AirControl           = 1.0f,
 				AirControlResistance = 20f,
-				Drag = 0.0675f
+				Drag = 0.05f
 			});
 			EntityManager.SetComponentData(entity, new SrtJumpMovementComponent
 			{

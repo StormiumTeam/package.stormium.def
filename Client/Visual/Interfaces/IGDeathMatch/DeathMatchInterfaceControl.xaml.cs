@@ -100,18 +100,10 @@ namespace IGDeathMatch_blend.Unity
             var button = (Button)sender;
             if (button.Content is PlayerSpectator playerSpectator)
             {
-                var rpcQuery = World.EntityManager.CreateEntityQuery(typeof(OutgoingRpcDataStreamBufferComponent));
-                if (rpcQuery.CalculateEntityCount() > 0)
-                {
-                    var entity = rpcQuery.GetSingletonEntity();
-                    var rpcBuffer = World.EntityManager.GetBuffer<OutgoingRpcDataStreamBufferComponent>(entity);
-                    var rpcQueue = World.GetOrCreateSystem<DefaultRpcProcessSystem<RequestToSpectateEntityRpc>>().RpcQueue;
-                    
-                    rpcQueue.Schedule(rpcBuffer, new RequestToSpectateEntityRpc
-                    {
-                        GhostTarget = World.EntityManager.GetComponentData<ReplicatedEntity>(playerSpectator.Entity).GhostId
-                    });
-                }
+                
+                var ghostTargetId = World.EntityManager.GetComponentData<ReplicatedEntity>(playerSpectator.Entity).GhostId;
+                var reqEnt        = World.EntityManager.CreateEntity(typeof(RequestToSpectateEntityRpc), typeof(SendRpcCommandRequestComponent));
+                World.EntityManager.SetComponentData(reqEnt, new RequestToSpectateEntityRpc {GhostTarget = ghostTargetId});
             }
 #endif
         }

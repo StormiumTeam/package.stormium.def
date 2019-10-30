@@ -39,7 +39,7 @@ namespace DefaultNamespace
 			{
 				var padRigidTransform     = new RigidTransform(padTransform.Value);
 				var movableRigidTransform = new RigidTransform(movableTransform.Value);
-				
+
 				if (!padCollider.ColliderPtr->CalculateAabb(padRigidTransform).Overlaps(movableCollider.ColliderPtr->CalculateAabb(movableRigidTransform)))
 					return false;
 
@@ -50,7 +50,7 @@ namespace DefaultNamespace
 					MaxDistance = 0f,
 					Transform   = padRigidTransform
 				};
-				
+
 				var anyCollector = new AnyHitCollector<DistanceHit>(0.0f);
 				if (!collection.CalculateDistance(penetrateInput, ref anyCollector, true))
 					return false;
@@ -76,7 +76,7 @@ namespace DefaultNamespace
 				{
 					if (cooldownBuffer[c].RemoveAtTick >= Tick)
 						continue;
-					
+
 					cooldownBuffer.RemoveAt(c);
 					c--;
 				}
@@ -115,7 +115,7 @@ namespace DefaultNamespace
 		private EntityQuery m_LaunchPadQuery;
 		private EntityQuery m_MovableQuery;
 
-		private TargetImpulseEvent.Provider m_TargetImpulseEventProvider;
+		private LazySystem<TargetImpulseEvent.Provider> m_TargetImpulseEventProvider;
 
 		protected override void OnCreate()
 		{
@@ -123,8 +123,6 @@ namespace DefaultNamespace
 
 			m_LaunchPadQuery = GetEntityQuery(typeof(LocalToWorld), typeof(LaunchPad), typeof(PhysicsCollider));
 			m_MovableQuery   = GetEntityQuery(typeof(LocalToWorld), typeof(MovableDescription), typeof(PhysicsCollider));
-
-			m_TargetImpulseEventProvider = World.GetOrCreateSystem<TargetImpulseEvent.Provider>();
 		}
 
 		protected override JobHandle OnUpdate(JobHandle inputDeps)
@@ -141,12 +139,13 @@ namespace DefaultNamespace
 				LocalToWorldType    = GetArchetypeChunkComponentType<LocalToWorld>(true),
 				PhysicsColliderType = GetArchetypeChunkComponentType<PhysicsCollider>(true),
 
-				ImpulseEventList = m_TargetImpulseEventProvider.GetEntityDelayedList(),
+				ImpulseEventList = this.L(ref m_TargetImpulseEventProvider).GetEntityDelayedList(),
 
 				CooldownFromEntity = GetBufferFromEntity<LaunchPadCooldown>()
 			}.ScheduleSingle(m_LaunchPadQuery, JobHandle.CombineDependencies(inputDeps, dependency));
 
-			m_TargetImpulseEventProvider.AddJobHandleForProducer(inputDeps);
+			m_TargetImpulseEventProvider.Get(World);
+			this.L(ref m_TargetImpulseEventProvider).AddJobHandleForProducer(inputDeps);
 
 			return inputDeps;
 		}

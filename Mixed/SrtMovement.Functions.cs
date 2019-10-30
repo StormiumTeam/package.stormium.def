@@ -95,10 +95,10 @@ namespace package.stormium.def
                 {
                     wishSpeed = settings.SprintSpeed;
 
-                    settings.Acceleration = 3f;
+                    settings.Acceleration = 1f;
                 }
             }
-
+            
             velocity = GroundAccelerate
                 (velocity, direction, wishSpeed, settings.Acceleration, math.min(strafeAngleNormalized, 0.25f), settings.DecayBaseSpeedFriction, dt);
 
@@ -163,7 +163,7 @@ namespace package.stormium.def
         public static float3 ApplyFriction(float3 velocity, float3 direction, float friction, float groundFriction, float maxSpeed, float accel, float deaccel, float dt)
         {
             direction = math.normalizesafe(direction);
-
+            
             var frictioned   = Vector3.MoveTowards(velocity, Vector3.zero, dt * groundFriction * friction);
             var defrictioned = Vector3.Lerp(velocity, frictioned, (1 - math.length(direction)));
 
@@ -201,8 +201,8 @@ namespace package.stormium.def
                 var c = 10f;
                 if (wishSpeed >= 10)
                     c = 1.25f;
-
-                return Vector3.MoveTowards(math.normalizesafe(velocity), wishDirection, dt * c * accelPower) * nextSpeed;
+                
+                return Vector3.MoveTowards(math.normalizesafe(velocity), wishDirection, dt * 10 * accelPower) * nextSpeed;
             }
 
             return Vector3.ClampMagnitude(velocity + wishDirection * (accelPower * dt), math.lerp(speed, wishSpeed, decay * dt));

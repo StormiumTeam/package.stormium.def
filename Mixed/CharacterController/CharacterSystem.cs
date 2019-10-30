@@ -151,15 +151,19 @@ namespace CharacterController
 						{
 							settings.BaseSpeed *= 0.5f;
 							settings.SprintSpeed = settings.BaseSpeed;
-							settings.SurfaceFriction = 20f;
+							settings.SurfaceFriction = 40f;
 							settings.FrictionSpeed = settings.BaseSpeed * 0.5f;
+							settings.FrictionSpeedMin = settings.BaseSpeed + 0.1f;
+							settings.FrictionSpeedMax = 20f;
+							settings.FrictionMax = 0.75f;
+							settings.Acceleration = 2.5f;
 							
 							// gain a bit more stamina when crouching
 							stamina.Value = math.clamp(stamina.Value + stamina.GainPerSecond * DeltaTime * 0.75f, 0, math.max(stamina.Value, stamina.Max));
 						}
 						else
 						{
-							settings.FrictionSpeed = settings.BaseSpeed + 0.1f;
+							settings.FrictionSpeed = settings.SprintSpeed + 0.1f;
 						}
 						
 						velocity.Value             = SrtMovement.GroundMove(velocity.Value, input.Move, direction, settings, DeltaTime);
@@ -209,7 +213,7 @@ namespace CharacterController
 							
 							var oldY       = velocity.Value.y;
 							var dirInertia = RayUtility.SlideVelocityNoYChange(math.normalizesafe(velocity.xfz), closestHit.SurfaceNormal);
-							var speed      = math.clamp(math.length(velocity.Value.xz) + 2f, 12f, 16f);
+							var speed      = math.clamp(math.length(velocity.Value.xz) + 2.5f, 12.5f, 16f);
 							
 							var choice0 = closestHit.SurfaceNormal;
 
@@ -229,7 +233,7 @@ namespace CharacterController
 							PhysicsCharacter.Depenetrate(ref moveData, PhysicsWorld);
 
 							aerialComponent.AirControl *= 0.1f;
-
+							
 							stamina.Apply(wallBounceComponent.StaminaUsageOnWallDodge);
 						}
 
@@ -266,8 +270,10 @@ namespace CharacterController
 						}
 						else if (aerialComponent.Drag > 0.0f)
 						{
-							velocity.Value.x = math.lerp(velocity.Value.x, 0, DeltaTime * aerialComponent.Drag);
-							velocity.Value.z = math.lerp(velocity.Value.z, 0, DeltaTime * aerialComponent.Drag);
+							velocity.Value.x = Mathf.MoveTowards(velocity.Value.x, 0, DeltaTime * aerialComponent.Drag * 0.5f);
+							velocity.Value.x = Mathf.Lerp(velocity.Value.x, 0, DeltaTime * aerialComponent.Drag);
+							velocity.Value.z = Mathf.MoveTowards(velocity.Value.z, 0, DeltaTime * aerialComponent.Drag * 0.5f);
+							velocity.Value.z = Mathf.Lerp(velocity.Value.z, 0, DeltaTime * aerialComponent.Drag);
 						}
 					}
 				}

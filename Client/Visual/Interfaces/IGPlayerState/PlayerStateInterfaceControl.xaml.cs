@@ -28,8 +28,9 @@ namespace IGPlayerState_blend.Unity
     /// </summary>
     public partial class PlayerStateInterfaceControl : UserControl
     {
-        private StaminaControl m_StaminaControl;
-        
+        private StaminaControl     m_StaminaControl;
+        private DebugNetKeyControl m_DebugNetKeyControl;
+
         public PlayerStateInterfaceControl()
         {
             Initialized += OnInitialized;
@@ -47,15 +48,15 @@ namespace IGPlayerState_blend.Unity
 
         private void OnInitialized(object sender, EventArgs args)
         {
-            m_StaminaControl = (StaminaControl) FindName("StaminaControl");
+            m_StaminaControl     = (StaminaControl) FindName("StaminaControl");
+            m_DebugNetKeyControl = (DebugNetKeyControl) FindName("DebugNetKeyControl");
         }
 
 #if NOESIS
-        private TimeSpan m_PreviousTimeSpan;
-
         public void OnUpdate(Entity localPlayer, CameraState cameraState)
         {
             m_StaminaControl.OnUpdate(World, cameraState.Target);
+            m_DebugNetKeyControl.OnUpdate(World, cameraState.Target);
         }
 #endif
     }

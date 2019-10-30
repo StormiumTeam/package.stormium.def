@@ -8,56 +8,47 @@ using UnityEngine;
 
 namespace RPCs
 {
-	public struct RequestToSpectateEntityRpc : IRpcCommand
+	public struct RequestToSpectateEntityRpc : IRpcCommandRequestComponentData
 	{
 		public uint GhostTarget;
 
-		public void Execute(Entity connection, World world)
-		{
-			var entity = world.EntityManager.CreateEntity(typeof(SpectateEntityRequest));
-			world.EntityManager.SetComponentData(entity, new SpectateEntityRequest
-			{
-				Connection  = connection,
-				GhostTarget = GhostTarget
-			});
-		}
-
-		public void WriteTo(DataStreamWriter writer)
+		public void Serialize(DataStreamWriter writer)
 		{
 			writer.Write(GhostTarget);
 		}
 
-		public void ReadFrom(DataStreamReader reader, ref DataStreamReader.Context ctx)
+		public void Deserialize(DataStreamReader reader, ref DataStreamReader.Context ctx)
 		{
 			GhostTarget = reader.ReadUInt(ref ctx);
 		}
+
+		public Entity SourceConnection { get; set; }
 	}
 
 	public struct SpectateEntityRequest : IComponentData
 	{
-		public Entity Connection;
-		public uint   GhostTarget;
+		public Entity Spectator;
+		public Entity Target;
 	}
 
 	[UpdateInGroup(typeof(OrderGroup.Simulation.UpdateEntities))]
 	public class ServerProcessSpectateEntityRequest : ComponentSystem
 	{
 		private EntityQuery m_RequestGroup;
-		
+
 		protected override void OnCreate()
 		{
 			base.OnCreate();
 
 			m_RequestGroup = GetEntityQuery(typeof(SpectateEntityRequest));
-			
-			RequireForUpdate(m_RequestGroup);
 		}
 
 		protected override void OnUpdate()
 		{
-			Entities.With(m_RequestGroup).ForEach((Entity ent, ref SpectateEntityRequest request) =>
+			// Transform all RPC request
+			Entities.ForEach((Entity reqEntity, ref RequestToSpectateEntityRpc req) =>
 			{
-				var requestCopy = request;
+				var requestCopy = req;
 
 				Entity ghostEntity = default;
 				Entities.ForEach((Entity entity, ref GhostIdentifier ghostIdentifier) =>
@@ -75,20 +66,25 @@ namespace RPCs
 					if (children.Length > 0)
 						ghostEntity = children[0].Child;
 				}
-				
-				Debug.Log($"Spectate Target: {ghostEntity}");
 
-				// temporary, get the player through this
-				if (EntityManager.HasComponent<CommandTargetComponent>(request.Connection))
+				var transformed = EntityManager.CreateEntity(typeof(SpectateEntityRequest));
+				EntityManager.SetComponentData(transformed, new SpectateEntityRequest
 				{
-					var playerTarget = EntityManager.GetComponentData<CommandTargetComponent>(request.Connection);
-					var serverCamera = EntityManager.GetComponentData<ServerCameraState>(playerTarget.targetEntity);
-					{
-						serverCamera.Data.Target = ghostEntity;
-					}
-					EntityManager.SetComponentData(playerTarget.targetEntity, serverCamera);
-				}
+					Target    = ghostEntity,
+					Spectator = EntityManager.GetComponentData<CommandTargetComponent>(req.SourceConnection).targetEntity
+				});
+				EntityManager.DestroyEntity(reqEntity);
+			});
 
+			Entities.With(m_RequestGroup).ForEach((Entity ent, ref SpectateEntityRequest request) =>
+			{
+				Debug.Log($"Request to spectate target: {request.Target}, from {request.Spectator}.");
+
+				var serverCamera = EntityManager.GetComponentData<ServerCameraState>(request.Spectator);
+				{
+					serverCamera.Data.Target = request.Target;
+				}
+				EntityManager.SetComponentData(request.Spectator, serverCamera);
 				EntityManager.DestroyEntity(ent);
 			});
 		}

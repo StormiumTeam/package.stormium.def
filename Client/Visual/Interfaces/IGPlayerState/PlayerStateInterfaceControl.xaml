@@ -8,34 +8,51 @@
              mc:Ignorable="d" 
              d:DesignHeight="1080" d:DesignWidth="1920">
     <Grid>
-        <Viewbox>
-            <Grid Height="1080" Width="1920">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="30*"/>
-                    <ColumnDefinition Width="25*"/>
-                    <ColumnDefinition Width="30*"/>
-                </Grid.ColumnDefinitions>
+        <Grid x:Name="DebugNetKeyGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="100*"/>
+                <ColumnDefinition Width="25*"/>
+                <ColumnDefinition Width="5*"/>
+            </Grid.ColumnDefinitions>
 
-                <Grid x:Name="CenterSide" Grid.Column="1">
-                    <Grid x:Name="StaminaGrid">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="100*" />
-                            <RowDefinition Height="6*" />
-                            <RowDefinition Height="4*" />
-                        </Grid.RowDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="100*"/>
+                <RowDefinition Height="25*"/>
+                <RowDefinition Height="5*"/>
+            </Grid.RowDefinitions>
 
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1*" />
-                            <ColumnDefinition Width="10*" />
-                            <ColumnDefinition Width="1*" />
-                        </Grid.ColumnDefinitions>
+            <Viewbox Grid.Column="1" Grid.Row="1" RenderTransformOrigin="0.5,0.5">
+                <Viewbox.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform/>
+                        <SkewTransform AngleX="-10" AngleY="2.5"/>
+                        <RotateTransform/>
+                        <TranslateTransform/>
+                    </TransformGroup>
+                </Viewbox.RenderTransform>
+                <local:DebugNetKeyControl x:Name="DebugNetKeyControl"/>
+                <noesis:Element.Projection>
+                    <noesis:PlaneProjection RotationX="-10" />
+                </noesis:Element.Projection>
+            </Viewbox>
+        </Grid>
 
-                        <Viewbox Grid.Column="1" Grid.Row="1" >
-                            <local:StaminaControl x:Name="StaminaControl" Width="750" Height="100"/>
-                        </Viewbox>
-                    </Grid>
-                </Grid>
-            </Grid>
-        </Viewbox>
+        <Grid x:Name="StaminaGrid">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="100*" />
+                <RowDefinition Height="6*" />
+                <RowDefinition Height="4*" />
+            </Grid.RowDefinitions>
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="10*" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <Viewbox Grid.Column="1" Grid.Row="1" >
+                <local:StaminaControl x:Name="StaminaControl" Width="750" Height="100"/>
+            </Viewbox>
+        </Grid>
     </Grid>
 </UserControl>
