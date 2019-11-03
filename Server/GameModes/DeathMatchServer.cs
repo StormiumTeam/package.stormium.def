@@ -16,6 +16,8 @@ using StormiumTeam.GameBase.Components;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
+using Unity.Transforms;
 using UnityEngine;
 
 namespace DefaultNamespace
@@ -154,20 +156,25 @@ namespace DefaultNamespace
 				{
 					characterProvider.CurrentPlayer = player;
 
-					var character = characterProvider.SpawnLocalEntityWithArguments(new ProKitCreateCharacter
+					for (var i = 0; i != 1; i++)
 					{
+						var character = characterProvider.SpawnLocalEntityWithArguments(new ProKitCreateCharacter
+						{
 
-					});
+						});
+						
+						worldCtx.EntityMgr.SetComponentData(character, new Translation {Value = new float3(i * 0.1f, 1, i * 0.1f)});
 
-					worldCtx.EntityMgr.AddComponentData(player, new PlayerCharacter {Character = character});
-					worldCtx.EntityMgr.SetComponentData(player, new ServerCameraState {Data    = new CameraState {Target = character}});
+						worldCtx.EntityMgr.SetOrAddComponentData(player, new PlayerCharacter {Character = character});
+						worldCtx.EntityMgr.SetComponentData(player, new ServerCameraState {Data    = new CameraState {Target = character}});
 
-					defHealthProvider.SpawnLocalEntityWithArguments(new DefaultHealthData.CreateInstance
-					{
-						owner = character,
-						value = 0,
-						max   = 100
-					});
+						defHealthProvider.SpawnLocalEntityWithArguments(new DefaultHealthData.CreateInstance
+						{
+							owner = character,
+							value = 0,
+							max   = 100
+						});
+					}
 				}
 			}
 

@@ -26,7 +26,7 @@ namespace CharacterController
 			return moveData.Position + math.mul(moveData.Rotation, capsuleBottom);
 		}
 
-		public static GroundResult CheckGround<TAgainst>(in MoveData moveData, in TAgainst collideAgainst, bool debug = true)
+		public static GroundResult CheckGround<TAgainst>(in MoveData moveData, in TAgainst collideAgainst, bool debug = false)
 			where TAgainst : struct, ICollidable
 		{
 			var geom = moveData.Probe->Geometry;
@@ -40,23 +40,25 @@ namespace CharacterController
 			input.Start       =  bottomPosition + new float3(0.0f, moveData.Probe->Radius, 0.0f);
 			input.End         =  input.Start - new float3(0, 0.08f, 0);
 			input.Start       += new float3(0, 0.1f, 0);
-
+/*
 			var rad = moveData.Probe->Radius;
 			Debug.DrawLine(input.Start - new float3(-rad, 0, 0.0f), input.End - new float3(-rad, rad, 0.0f), Color.magenta); // left
 			Debug.DrawLine(input.Start - new float3(rad, 0, 0.0f), input.End - new float3(rad, rad, 0.0f), Color.magenta);   // right
 			Debug.DrawLine(input.Start - new float3(0.0f, 0, -rad), input.End - new float3(0.0f, rad, -rad), Color.magenta);
 			Debug.DrawLine(input.Start - new float3(0.0f, 0, rad), input.End - new float3(0.0f, rad, rad), Color.magenta);
 			Debug.DrawLine(input.Start - new float3(0.0f, 0, 0.0f), input.End - new float3(0.0f, rad, 0.0f), Color.magenta);
-
+*/
 			GroundResult groundResult;
 			groundResult.State          = GroundState.None;
 			groundResult.RigidBodyIndex = -1;
+			groundResult.HitPosition = float3.zero;
 
 			var allHits = new NativeList<ColliderCastHit>(16, Allocator.Temp);
 			collideAgainst.CastCollider(input, ref allHits);
 			for (var i = 0; i != allHits.Length; i++)
 			{
 				groundResult.RigidBodyIndex = allHits[i].RigidBodyIndex;
+				groundResult.HitPosition = allHits[i].Position;
 
 				if (allHits[i].SurfaceNormal.y > 0.25f)
 				{
@@ -123,6 +125,7 @@ namespace CharacterController
 				bool found = false;
 
 				// check for obstacles first
+				if (math.lengthsq(moveData.Velocity) > math.FLT_MIN_NORMAL)
 				{
 					var input = new ColliderCastInput
 					{
@@ -141,8 +144,8 @@ namespace CharacterController
 						var eventType = MoveEventType.Obstacle;
 						if (hit.SurfaceNormal.y > 0.25f)
 						{
-							var project = Vector3.Cross(moveData.Velocity, hit.SurfaceNormal);
-							project = Vector3.Cross(hit.SurfaceNormal, project);
+							var project = math.cross(moveData.Velocity, hit.SurfaceNormal);
+							project = math.cross(hit.SurfaceNormal, project);
 
 							moveData.Velocity += moveData.Velocity * project;
 
@@ -275,6 +278,7 @@ namespace CharacterController
 	{
 		public GroundState State;
 		public int RigidBodyIndex;
+		public float3 HitPosition;
 	}
 
 	[Flags]

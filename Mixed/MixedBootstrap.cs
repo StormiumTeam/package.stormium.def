@@ -20,6 +20,7 @@ namespace DefaultNamespace
                 var i = 1;
                 foreach (var type in GetTypes(typeof(ISystemDelegateForSnapshot), typeof(ComponentSystemBase)))
                 {
+                    Debug.Log($"System#{i} --> {type}");
                     builder.Add(world.GetOrCreateSystem(type));
                     i++;
                 }

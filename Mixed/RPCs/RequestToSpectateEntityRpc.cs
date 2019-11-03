@@ -34,19 +34,21 @@ namespace RPCs
 	[UpdateInGroup(typeof(OrderGroup.Simulation.UpdateEntities))]
 	public class ServerProcessSpectateEntityRequest : ComponentSystem
 	{
+		private EntityQuery m_RpcGroup;
 		private EntityQuery m_RequestGroup;
 
 		protected override void OnCreate()
 		{
 			base.OnCreate();
 
+			m_RpcGroup = GetEntityQuery(typeof(RequestToSpectateEntityRpc), ComponentType.Exclude<SendRpcCommandRequestComponent>());
 			m_RequestGroup = GetEntityQuery(typeof(SpectateEntityRequest));
 		}
 
 		protected override void OnUpdate()
 		{
 			// Transform all RPC request
-			Entities.ForEach((Entity reqEntity, ref RequestToSpectateEntityRpc req) =>
+			Entities.With(m_RpcGroup).ForEach((Entity reqEntity, ref RequestToSpectateEntityRpc req) =>
 			{
 				var requestCopy = req;
 
@@ -55,7 +57,7 @@ namespace RPCs
 				{
 					if (ghostIdentifier.Value == requestCopy.GhostTarget)
 					{
-						ghostEntity = entity;
+						ghostEntity = entity; 
 					}
 				});
 

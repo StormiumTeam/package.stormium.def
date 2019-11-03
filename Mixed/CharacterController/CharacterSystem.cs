@@ -4,6 +4,7 @@ using package.stormiumteam.shared.ecs;
 using Revolution.NetCode;
 using Stormium.Default;
 using StormiumTeam.GameBase;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -19,12 +20,32 @@ using SphereCollider = Unity.Physics.SphereCollider;
 
 namespace CharacterController
 {
+	public struct CharacterPass : IBufferElementData
+	{
+		public float3       Direction;
+		public float3       Position;
+		public float3       Velocity;
+		public GroundResult Ground;
+	}
+
 	[UpdateInGroup(typeof(CharacterInteractionGroup))]
 	[UpdateInWorld(WorldType.ServerWorld)]
 	public unsafe partial class CharacterSystem : JobGameBaseSystem
 	{
+		[BurstCompile]
 		private partial struct UpdateJob : IJobForEachWithEntity<PhysicsCharacter, PhysicsCollider, Translation, Rotation, Velocity>
 		{
+			private struct Updaters
+			{
+				public ComponentUpdater<Stamina>                        Stamina;
+				public ComponentUpdater<SrtGroundMovementComponent>     GroundMovement;
+				public ComponentUpdater<SrtAerialMovementComponent>     AerialMovement;
+				public ComponentUpdater<AirTime>                        AirTime;
+				public ComponentUpdater<SrtJumpMovementComponent>       JumpMovement;
+				public ComponentUpdater<SrtDodgeMovementComponent>      DodgeMovement;
+				public ComponentUpdater<SrtWallBounceMovementComponent> WallBounceMovement;
+			}
+
 			private const int MaxIteration = 8;
 
 			[ReadOnly]
@@ -65,13 +86,14 @@ namespace CharacterController
 					Radius = physChar.MaxStepHeight
 				}, physColl.ColliderPtr->Filter);
 
-				var stamina             = StaminaFromEntity.TryGet(entity, out var hasStaminaComponent, default);
-				var groundComponent     = GroundComponentFromEntity.TryGet(entity, out var hasGroundComponent, new SrtGroundMovementComponent {Settings = SrtGroundSettings.NewBase()});
-				var aerialComponent     = AerialComponentFromEntity.TryGet(entity, out var hasAerialComponent, new SrtAerialMovementComponent {Settings = SrtAerialSettings.NewBase()});
-				var airTime = AirTimeFromEntity.TryGet(entity, out var hasAirTimeComponent, default);
-				var jumpComponent       = JumpComponentFromEntity.TryGet(entity, out var hasJumpComponent, default);
-				var dodgeComponent      = DodgeComponentFromEntity.TryGet(entity, out var hasDodgeComponent, default);
-				var wallBounceComponent = WallBounceComponentFromEntity.TryGet(entity, out var hasWallBounceComponent, default);
+				Updaters updaters;
+				updaters.Stamina = StaminaFromEntity.GetUpdater(entity);
+				updaters.GroundMovement = GroundComponentFromEntity.GetUpdater(entity);
+				updaters.AerialMovement = AerialComponentFromEntity.GetUpdater(entity);
+				updaters.AirTime = AirTimeFromEntity.GetUpdater(entity);
+				updaters.JumpMovement = JumpComponentFromEntity.GetUpdater(entity);
+				updaters.DodgeMovement = DodgeComponentFromEntity.GetUpdater(entity);
+				updaters.WallBounceMovement = WallBounceComponentFromEntity.GetUpdater(entity);
 
 				LocalToWorld localToWorld;
 				localToWorld.Value = new float4x4(rotation.Value, translation.Value);
@@ -100,7 +122,7 @@ namespace CharacterController
 				var directionForward = SrtMovement.ComputeDirectionFwd(localToWorld.Forward, rotation.Value, input.Move);
 				if (groundResult.State == GroundState.StableOnGround)
 				{
-					airTime.Value = math.min(airTime.Value, 0) - DeltaTime;
+					airTime.value.Value = math.min(airTime.Value, 0) - DeltaTime;
 					
 					// ------------------- ------------------- -------------------
 					// Jump from ground
@@ -150,20 +172,26 @@ namespace CharacterController
 						if (input.Crouch)
 						{
 							settings.BaseSpeed *= 0.5f;
-							settings.SprintSpeed = settings.BaseSpeed;
-							settings.SurfaceFriction = 40f;
-							settings.FrictionSpeed = settings.BaseSpeed * 0.5f;
+							settings.SprintSpeed = settings.BaseSpeed * 1.5f;
+							settings.SurfaceFriction = 20f;
+							settings.FrictionSpeed = settings.BaseSpeed * 1.5f;
 							settings.FrictionSpeedMin = settings.BaseSpeed + 0.1f;
 							settings.FrictionSpeedMax = 20f;
 							settings.FrictionMax = 0.75f;
-							settings.Acceleration = 2.5f;
+							settings.Acceleration = 10f;
 							
 							// gain a bit more stamina when crouching
-							stamina.Value = math.clamp(stamina.Value + stamina.GainPerSecond * DeltaTime * 0.75f, 0, math.max(stamina.Value, stamina.Max));
+							stamina.Value = math.clamp(stamina.Value + stamina.GainPerSecond * DeltaTime * 0.25f, 0, math.max(stamina.Value, stamina.Max));
 						}
 						else
 						{
 							settings.FrictionSpeed = settings.SprintSpeed + 0.1f;
+						}
+
+						if (velocity.speed < groundComponent.Settings.BaseSpeed && airTime.Value < -1f)
+						{
+							// gain a bit more stamina when not running
+							stamina.Value = math.clamp(stamina.Value + stamina.GainPerSecond * DeltaTime * 0.75f, 0, math.max(stamina.Value, stamina.Max));
 						}
 						
 						velocity.Value             = SrtMovement.GroundMove(velocity.Value, input.Move, direction, settings, DeltaTime);
@@ -254,8 +282,21 @@ namespace CharacterController
 							stamina.HasEnough(StaminaUsage.FromAbsolute(velocity.speed * 0.05f), out var power);
 							if (velocity.Value.y < -0.5f)
 							{
-								velocity.Value.y = math.lerp(velocity.Value.y, -0.5f, DeltaTime * power * 0.33f);
-								velocity.Value.y = Mathf.MoveTowards(velocity.Value.y, -1, DeltaTime * power * 12.5f);
+								var prevPower = power;
+								var groundDistance = math.abs(groundResult.HitPosition.y - PhysicsCharacter.GetBottomPosition(moveData).y);
+								if (groundDistance < 10)
+								{
+									power *= 1 + (1 - groundDistance * (1f / 10f));
+								}
+								if (groundDistance < 5)
+								{
+									power *= 1 + (1 - groundDistance * (1f / 5f));
+								}
+								
+								velocity.Value.y = math.lerp(velocity.Value.y, -0.5f, DeltaTime * power * 0.25f);
+								velocity.Value.y = Mathf.MoveTowards(velocity.Value.y, -1, DeltaTime * power * 10f);
+
+								power = prevPower;
 							}
 
 							var flatVel = velocity.Value;
@@ -266,14 +307,25 @@ namespace CharacterController
 							var distance = math.distance(flatVel, velocity.Value);
 							velocity.Value = flatVel;
 
-							stamina.Apply(StaminaUsage.FromPercentage(math.clamp((power + distance * 2f) * 0.01f, 0.01f, 0.1f)));
+							stamina.Apply(StaminaUsage.FromPercentage(math.clamp((power + distance * 2f) * 0.01f, 0.0125f, 0.125f)));
 						}
 						else if (aerialComponent.Drag > 0.0f)
 						{
 							velocity.Value.x = Mathf.MoveTowards(velocity.Value.x, 0, DeltaTime * aerialComponent.Drag * 0.5f);
-							velocity.Value.x = Mathf.Lerp(velocity.Value.x, 0, DeltaTime * aerialComponent.Drag);
+							velocity.Value.x = math.lerp(velocity.Value.x, 0, DeltaTime * aerialComponent.Drag);
 							velocity.Value.z = Mathf.MoveTowards(velocity.Value.z, 0, DeltaTime * aerialComponent.Drag * 0.5f);
-							velocity.Value.z = Mathf.Lerp(velocity.Value.z, 0, DeltaTime * aerialComponent.Drag);
+							velocity.Value.z = math.lerp(velocity.Value.z, 0, DeltaTime * aerialComponent.Drag);
+
+							if (input.Crouch && velocity.Value.y > 0)
+							{
+								var prevY = velocity.Value.y;
+								
+								stamina.HasEnough(StaminaUsage.FromAbsolute(prevY * 0.05f), out var power);
+								velocity.Value.y = math.lerp(velocity.Value.y, math.min(prevY, 0), DeltaTime * power);
+								velocity.Value.y -= power * DeltaTime;
+								
+								stamina.Apply(StaminaUsage.FromPercentage(math.clamp(prevY * power * 0.0019f, 0.001f, 0.1f)));
+							}
 						}
 					}
 				}

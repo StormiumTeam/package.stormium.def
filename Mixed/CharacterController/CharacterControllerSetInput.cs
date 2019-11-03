@@ -1,3 +1,4 @@
+using package.stormiumteam.shared;
 using Revolution;
 using Revolution.NetCode;
 using Revolution.Utils;
@@ -28,9 +29,9 @@ namespace CharacterController
 		{
 			public QuantizedFloat2 Move;
 			public QuantizedFloat2 Look;
-			public uint            Jump;
-			public uint            Dodge;
-			public uint            Crouch;
+			public bool            Jump;
+			public bool            Dodge;
+			public bool            Crouch;
 
 			public void WriteTo(DataStreamWriter writer, ref Snapshot baseline, NetworkCompressionModel compressionModel)
 			{
@@ -40,9 +41,19 @@ namespace CharacterController
 					writer.WritePackedIntDelta(Look[i], baseline.Look[i], compressionModel);
 				}
 
-				writer.WritePackedUIntDelta(Jump, baseline.Jump, compressionModel);
-				writer.WritePackedUIntDelta(Dodge, baseline.Dodge, compressionModel);
-				writer.WritePackedUIntDelta(Crouch, baseline.Crouch, compressionModel);
+				var pos  = 0;
+				var mask = default(byte);
+				MainBit.SetBitAt(ref mask, pos++, Jump);
+				MainBit.SetBitAt(ref mask, pos++, Dodge);
+				MainBit.SetBitAt(ref mask, pos++, Crouch);
+
+				pos = 0;
+				var baselineMask = default(byte);
+				MainBit.SetBitAt(ref baselineMask, pos++, baseline.Jump);
+				MainBit.SetBitAt(ref baselineMask, pos++, baseline.Dodge);
+				MainBit.SetBitAt(ref baselineMask, pos++, baseline.Crouch);
+
+				writer.WritePackedUIntDelta(mask, baselineMask, compressionModel);
 			}
 
 			public void ReadFrom(ref DataStreamReader.Context ctx, DataStreamReader reader, ref Snapshot baseline, NetworkCompressionModel compressionModel)
@@ -53,29 +64,37 @@ namespace CharacterController
 					Look[i] = reader.ReadPackedIntDelta(ref ctx, baseline.Look[i], compressionModel);
 				}
 
-				Jump   = reader.ReadPackedUIntDelta(ref ctx, baseline.Jump, compressionModel);
-				Dodge  = reader.ReadPackedUIntDelta(ref ctx, baseline.Dodge, compressionModel);
-				Crouch = reader.ReadPackedUIntDelta(ref ctx, baseline.Crouch, compressionModel);
+				var pos          = 0;
+				var baselineMask = default(byte);
+				MainBit.SetBitAt(ref baselineMask, pos++, baseline.Jump);
+				MainBit.SetBitAt(ref baselineMask, pos++, baseline.Dodge);
+				MainBit.SetBitAt(ref baselineMask, pos++, baseline.Crouch);
+
+				pos = 0;
+				var mask = reader.ReadPackedUIntDelta(ref ctx, baselineMask, compressionModel);
+				Jump   = MainBit.GetBitAt(mask, pos++) == 1;
+				Dodge  = MainBit.GetBitAt(mask, pos++) == 1;
+				Crouch = MainBit.GetBitAt(mask, pos++) == 1;
 			}
 
 			public uint Tick { get; set; }
 
 			public void SynchronizeFrom(in CharacterInput component, in DefaultSetup setup, in SerializeClientData serializeData)
 			{
-				Move.Set(1000, component.Move);
-				Look.Set(1000, component.Look);
-				Jump   = component.Jump ? 1u : 0u;
-				Dodge  = component.Dodge ? 1u : 0u;
-				Crouch = component.Crouch ? 1u : 0u;
+				Move.Set(100, component.Move);
+				Look.Set(100, component.Look);
+				Jump   = component.Jump;
+				Dodge  = component.Dodge;
+				Crouch = component.Crouch;
 			}
 
 			public void SynchronizeTo(ref CharacterInput component, in DeserializeClientData deserializeData)
 			{
-				component.Move   = Move.Get(0.001f);
-				component.Look   = Look.Get(0.001f);
-				component.Jump   = Jump == 1;
-				component.Dodge  = Dodge == 1;
-				component.Crouch = Crouch == 1;
+				component.Move   = Move.Get(0.01f);
+				component.Look   = Look.Get(0.01f);
+				component.Jump   = Jump;
+				component.Dodge  = Dodge;
+				component.Crouch = Crouch;
 			}
 		}
 
@@ -112,7 +131,7 @@ namespace CharacterController
 				Debug.DrawRay(ltw.Position, Vector3.up * 2, Color.red);
 				Debug.DrawRay(ltw.Position, ltw.Forward, Color.green);
 			});
-			
+
 			Entities.ForEach((ref SrtJumpMovementComponent component, ref Relative<PlayerDescription> playerRelative) =>
 			{
 				if (!EntityManager.HasComponent<GamePlayerUserCommand>(playerRelative.Target) || !EntityManager.HasComponent<WorldOwnedTag>(playerRelative.Target))

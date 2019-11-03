@@ -70,7 +70,9 @@ namespace DefaultNamespace
 		public void WriteTo(DataStreamWriter writer, ref PredictedTranslationSnapshot baseline, NetworkCompressionModel compressionModel)
 		{
 			for (var i = 0; i != 3; i++)
+			{
 				writer.WritePackedIntDelta(Value[i], baseline.Value[i], compressionModel);
+			}
 		}
 
 		public void ReadFrom(ref DataStreamReader.Context ctx, DataStreamReader reader, ref PredictedTranslationSnapshot baseline, NetworkCompressionModel compressionModel)
@@ -119,7 +121,7 @@ namespace DefaultNamespace
 			var predictor = new GhostDeltaPredictor(tick, Tick, baseline1.Tick, baseline2.Tick);
 			for (var i = 0; i != 3; i++)
 			{
-				Value[i] = predictor.PredictInt(Value[i], baseline1.Value[i], baseline2.Value[i]);
+				//Value[i] = predictor.PredictInt(Value[i], baseline1.Value[i], baseline2.Value[i]);
 			}
 		}
 	}
