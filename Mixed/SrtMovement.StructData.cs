@@ -57,17 +57,17 @@ namespace package.stormium.def
         {
             return new SrtGroundSettings
             {
-                FrictionSpeedMin = 12f,
+                FrictionSpeedMin = 10f,
                 FrictionSpeedMax = 25f,
 
                 FrictionMin = 0.25f, 
                 FrictionMax = 1f,
 
-                SurfaceFriction        = 50f,
-                DecayBaseSpeedFriction = 8.5f,
+                SurfaceFriction        = 40f,
+                DecayBaseSpeedFriction = 2.5f,
 
-                Acceleration   = 50f,
-                Deacceleration = 17.5f,
+                Acceleration   = 52.5f,
+                Deacceleration = 5f,
                 BaseSpeed      = 8f,
                 SprintSpeed    = 10f,
             };
@@ -101,9 +101,9 @@ namespace package.stormium.def
             return new SrtAerialSettings
             {
                 Acceleration             = 1f,
-                AccelerationByHighsForce = 0f,
+                AccelerationByHighsForce = 0.004f,
                 Control                  = 35f,
-                BaseSpeed                = 9f,
+                BaseSpeed                = 8f,
             };
         }
     }

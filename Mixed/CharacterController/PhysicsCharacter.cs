@@ -26,6 +26,9 @@ namespace CharacterController
 			return moveData.Position + math.mul(moveData.Rotation, capsuleBottom);
 		}
 
+		//public const float GroundCastM = 0.1f;
+		public const float GroundCastM = 0.03f;
+
 		public static GroundResult CheckGround<TAgainst>(in MoveData moveData, in TAgainst collideAgainst, bool debug = false)
 			where TAgainst : struct, ICollidable
 		{
@@ -38,8 +41,8 @@ namespace CharacterController
 			input.Collider    =  (Collider*) moveData.Probe;
 			input.Orientation =  quaternion.identity;
 			input.Start       =  bottomPosition + new float3(0.0f, moveData.Probe->Radius, 0.0f);
-			input.End         =  input.Start - new float3(0, 0.08f, 0);
-			input.Start       += new float3(0, 0.1f, 0);
+			input.End         =  input.Start - new float3(0, GroundCastM * 0.8f, 0);
+			input.Start       += new float3(0, GroundCastM, 0);
 /*
 			var rad = moveData.Probe->Radius;
 			Debug.DrawLine(input.Start - new float3(-rad, 0, 0.0f), input.End - new float3(-rad, rad, 0.0f), Color.magenta); // left

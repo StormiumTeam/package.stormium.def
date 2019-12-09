@@ -1,9 +1,11 @@
 using System;
+using DefaultNamespace;
 using package.stormium.def;
 using package.stormiumteam.shared.ecs;
-using Revolution.NetCode;
+using Unity.NetCode;
 using Stormium.Default;
 using StormiumTeam.GameBase;
+using StormiumTeam.GameBase.Components;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -20,410 +22,275 @@ using SphereCollider = Unity.Physics.SphereCollider;
 
 namespace CharacterController
 {
+	[InternalBufferCapacity(16)]
 	public struct CharacterPass : IBufferElementData
 	{
+		public PhysicsCharacter             Character;
+		public PhysicsCollider              Collider;
+		public BlobAssetReference<Collider> Probe;
+
 		public float3       Direction;
 		public float3       Position;
+		public quaternion   Rotation;
 		public float3       Velocity;
 		public GroundResult Ground;
+
+		public LocalToWorld ToWorld => new LocalToWorld {Value = new float4x4(Rotation, Position)};
+
+		public unsafe MoveData ToMoveData()
+		{
+			MoveData moveData;
+			moveData.Character = Character;
+			moveData.Probe     = (SphereCollider*) Probe.GetUnsafePtr();
+			moveData.Collider  = (CapsuleCollider*) Collider.ColliderPtr;
+			moveData.Position  = Position;
+			moveData.Rotation  = Rotation;
+			moveData.Velocity  = Velocity;
+			return moveData;
+		}
 	}
 
-	[UpdateInGroup(typeof(CharacterInteractionGroup))]
-	[UpdateInWorld(WorldType.ServerWorld)]
-	public unsafe partial class CharacterSystem : JobGameBaseSystem
+	public static class CharacterPassExtension
 	{
-		[BurstCompile]
-		private partial struct UpdateJob : IJobForEachWithEntity<PhysicsCharacter, PhysicsCollider, Translation, Rotation, Velocity>
+		public static bool TryGetPass(this DynamicBuffer<CharacterPass> buffer, int index, out CharacterPass pass)
 		{
-			private struct Updaters
-			{
-				public ComponentUpdater<Stamina>                        Stamina;
-				public ComponentUpdater<SrtGroundMovementComponent>     GroundMovement;
-				public ComponentUpdater<SrtAerialMovementComponent>     AerialMovement;
-				public ComponentUpdater<AirTime>                        AirTime;
-				public ComponentUpdater<SrtJumpMovementComponent>       JumpMovement;
-				public ComponentUpdater<SrtDodgeMovementComponent>      DodgeMovement;
-				public ComponentUpdater<SrtWallBounceMovementComponent> WallBounceMovement;
-			}
+			pass = default;
+			if (buffer.Length <= index || buffer.Length == 0)
+				return false;
 
-			private const int MaxIteration = 8;
-
-			[ReadOnly]
-			public UTick Tick;
-
-			[ReadOnly]
-			public ComponentDataFromEntity<CharacterInput> InputFromEntity;
-
-			[NativeDisableParallelForRestriction] public ComponentDataFromEntity<Stamina>                        StaminaFromEntity;
-			[NativeDisableParallelForRestriction] public ComponentDataFromEntity<SrtGroundMovementComponent>     GroundComponentFromEntity;
-			[NativeDisableParallelForRestriction] public ComponentDataFromEntity<SrtAerialMovementComponent>     AerialComponentFromEntity;
-			[NativeDisableParallelForRestriction] public ComponentDataFromEntity<AirTime>     AirTimeFromEntity;
-			[NativeDisableParallelForRestriction] public ComponentDataFromEntity<SrtJumpMovementComponent>       JumpComponentFromEntity;
-			[NativeDisableParallelForRestriction] public ComponentDataFromEntity<SrtDodgeMovementComponent>      DodgeComponentFromEntity;
-			[NativeDisableParallelForRestriction] public ComponentDataFromEntity<SrtWallBounceMovementComponent> WallBounceComponentFromEntity;
-			
-			[ReadOnly] public ComponentDataFromEntity<Velocity> VelocityFromEntity;
-
-			[ReadOnly]
-			public PhysicsWorld PhysicsWorld;
-
-			public float DeltaTime;
-
-			public void Execute(Entity entity, int ent_index, ref PhysicsCharacter physChar, ref PhysicsCollider physColl, ref Translation translation, ref Rotation rotation, ref Velocity velocity)
-			{
-				var gravity = new float3(0, -15, 0.0f);
-				var startVelocity = velocity.Value;
-
-				if (physColl.ColliderPtr->Type != ColliderType.Capsule)
-					throw new InvalidOperationException("Only Capsule colliders are allowed for Character Movement.");
-
-				var capsuleColl = (CapsuleCollider*) physColl.ColliderPtr;
-				if (physChar.MaxStepHeight > capsuleColl->Radius)
-					throw new InvalidOperationException("1");
-
-				var probeColl = SphereCollider.Create(new SphereGeometry
-				{
-					Radius = physChar.MaxStepHeight
-				}, physColl.ColliderPtr->Filter);
-
-				Updaters updaters;
-				updaters.Stamina = StaminaFromEntity.GetUpdater(entity);
-				updaters.GroundMovement = GroundComponentFromEntity.GetUpdater(entity);
-				updaters.AerialMovement = AerialComponentFromEntity.GetUpdater(entity);
-				updaters.AirTime = AirTimeFromEntity.GetUpdater(entity);
-				updaters.JumpMovement = JumpComponentFromEntity.GetUpdater(entity);
-				updaters.DodgeMovement = DodgeComponentFromEntity.GetUpdater(entity);
-				updaters.WallBounceMovement = WallBounceComponentFromEntity.GetUpdater(entity);
-
-				LocalToWorld localToWorld;
-				localToWorld.Value = new float4x4(rotation.Value, translation.Value);
-
-				MoveData moveData;
-				moveData.Character = physChar;
-				moveData.Probe     = (SphereCollider*) probeColl.GetUnsafePtr();
-				moveData.Collider  = capsuleColl;
-				moveData.Position  = translation.Value;
-				moveData.Rotation  = rotation.Value;
-				moveData.Velocity  = velocity.Value;
-
-				var groundResult = PhysicsCharacter.CheckGround(moveData, PhysicsWorld);
-				var becameUnsupported = false;
-				if (groundResult.State == GroundState.StableOnGround && velocity.Value.y > 0.01f)
-				{
-					groundResult.State = GroundState.None;
-					becameUnsupported = true;
-				}
-
-				var input = InputFromEntity[entity];
-
-				rotation.Value = quaternion.AxisAngle(math.up(), math.radians(input.Look.x));
-
-				var direction        = SrtMovement.ComputeDirection(rotation.Value, input.Move);
-				var directionForward = SrtMovement.ComputeDirectionFwd(localToWorld.Forward, rotation.Value, input.Move);
-				if (groundResult.State == GroundState.StableOnGround)
-				{
-					airTime.value.Value = math.min(airTime.Value, 0) - DeltaTime;
-					
-					// ------------------- ------------------- -------------------
-					// Jump from ground
-					if (hasJumpComponent && jumpComponent.JumpQueued >= Tick || input.Jump)
-					{
-						jumpComponent.JumpQueued = default;
-						
-						var strafeAngle = SrtMovement.GetStrafeAngleNormalized(direction, math.float3(velocity.Value.x, 0, velocity.Value.z));
-						if (jumpComponent.IsJumpingInChain)
-						{
-							strafeAngle *= 0.25f;
-						}
-
-						velocity.Value   += direction * (strafeAngle * 1.0f);
-						velocity.Value.y += jumpComponent.IsJumpingInChain ? 4f : 6f;
-
-						stamina.Apply(jumpComponent.IsJumpingInChain ? jumpComponent.StaminaUsageOnChainingJump : jumpComponent.StaminaUsageOnStandardJump);
-
-						jumpComponent.IsJumpingInChain = true;
-					}
-					// ------------------- ------------------- -------------------
-					// Dodge on ground
-					else if (hasDodgeComponent && airTime.Value < -0.1f && dodgeComponent.DodgeQueued >= Tick && stamina.HasEnough(dodgeComponent.StaminaUsage))
-					{
-						dodgeComponent.DodgeQueued = default;
-						
-						float upForce = 0.0f;
-
-						velocity.Value = SrtMovement.GroundDodge(velocity.Value, directionForward, 0.5f, 14f, 16.5f);
-
-						moveData.Position += velocity.Value * 0.25f;
-						PhysicsCharacter.Depenetrate(ref moveData, PhysicsWorld);
-
-						velocity.Value.y           +=  4f + math.max(upForce * 15f, 0);
-						aerialComponent.AirControl *= 0.5f;
-
-						// If the players jump after the dodge, it need to be treated as a consecutive jump
-						jumpComponent.IsJumpingInChain = true;
-
-						stamina.Apply(dodgeComponent.StaminaUsage);
-					}
-					// ------------------- ------------------- -------------------
-					// Basic ground movement
-					else
-					{
-						var settings = groundComponent.Settings;
-						if (input.Crouch)
-						{
-							settings.BaseSpeed *= 0.5f;
-							settings.SprintSpeed = settings.BaseSpeed * 1.5f;
-							settings.SurfaceFriction = 20f;
-							settings.FrictionSpeed = settings.BaseSpeed * 1.5f;
-							settings.FrictionSpeedMin = settings.BaseSpeed + 0.1f;
-							settings.FrictionSpeedMax = 20f;
-							settings.FrictionMax = 0.75f;
-							settings.Acceleration = 10f;
-							
-							// gain a bit more stamina when crouching
-							stamina.Value = math.clamp(stamina.Value + stamina.GainPerSecond * DeltaTime * 0.25f, 0, math.max(stamina.Value, stamina.Max));
-						}
-						else
-						{
-							settings.FrictionSpeed = settings.SprintSpeed + 0.1f;
-						}
-
-						if (velocity.speed < groundComponent.Settings.BaseSpeed && airTime.Value < -1f)
-						{
-							// gain a bit more stamina when not running
-							stamina.Value = math.clamp(stamina.Value + stamina.GainPerSecond * DeltaTime * 0.75f, 0, math.max(stamina.Value, stamina.Max));
-						}
-						
-						velocity.Value             = SrtMovement.GroundMove(velocity.Value, input.Move, direction, settings, DeltaTime);
-						aerialComponent.AirControl = 1.0f;
-						
-						jumpComponent.IsJumpingInChain = false;	
-					}
-				}
-				else
-				{
-					airTime.Value = math.max(airTime.Value, 0) + DeltaTime;
-					
-					// ------------------- ------------------- -------------------
-					// Wall Bouncing
-					if (hasWallBounceComponent && airTime.Value > 0.1f && CanWallBounce(ref moveData, jumpComponent, dodgeComponent, wallBounceComponent, direction, out var closestHit))
-					{
-						if (jumpComponent.JumpQueued >= Tick && wallBounceComponent.EnableWallJump)
-						{
-							jumpComponent.JumpQueued = default;
-							
-							var bouncePower = 6f;
-							if (!stamina.HasEnough(wallBounceComponent.StaminaUsageOnWallJump, out var neededPercentage))
-							{
-								bouncePower *= neededPercentage;
-							}
-							
-							var bounce = closestHit.SurfaceNormal * bouncePower;
-							var verticalBonus = math.distance(math.min(velocity.Value.y, 0), math.min(velocity.Value.y + 4f, 0));
-							bounce.y += bouncePower + verticalBonus;
-
-							velocity.Value =  RayUtility.SlideVelocityNoYChange(velocity.Value, closestHit.SurfaceNormal);
-							velocity.Value += bounce;
-
-							aerialComponent.AirControl *= 0.5f;
-
-							stamina.Apply(wallBounceComponent.StaminaUsageOnWallJump);
-						}
-						else if (dodgeComponent.DodgeQueued >= Tick && wallBounceComponent.EnableWallDodge)
-						{
-							dodgeComponent.DodgeQueued = default;
-							
-							var power = 1f;
-							if (!stamina.HasEnough(wallBounceComponent.StaminaUsageOnWallDodge, out var neededPercentage))
-							{
-								power *= neededPercentage;
-							}
-							
-							var oldY       = velocity.Value.y;
-							var dirInertia = RayUtility.SlideVelocityNoYChange(math.normalizesafe(velocity.xfz), closestHit.SurfaceNormal);
-							var speed      = math.clamp(math.length(velocity.Value.xz) + 2.5f, 12.5f, 16f);
-							
-							var choice0 = closestHit.SurfaceNormal;
-
-							var dotProduct = math.dot(directionForward, dirInertia); 
-							if (dotProduct < 0)
-							{
-								directionForward = SrtMovement.ComputeDirectionFwd(localToWorld.Forward, rotation.Value, input.Move * -1);
-							}
-
-							var wantedVelocity = (float3) Vector3.Reflect(directionForward, choice0) * speed;
-							wantedVelocity += closestHit.SurfaceNormal * math.abs(dotProduct) * 2.5f;
-							wantedVelocity.y = math.max(oldY + 2f, 2.5f);
-
-							velocity.Value = math.lerp(velocity.Value, wantedVelocity, power);
-							
-							moveData.Position += velocity.Value * 0.1f;
-							PhysicsCharacter.Depenetrate(ref moveData, PhysicsWorld);
-
-							aerialComponent.AirControl *= 0.1f;
-							
-							stamina.Apply(wallBounceComponent.StaminaUsageOnWallDodge);
-						}
-
-						wallBounceComponent.LastBounceTick = Tick;
-					}
-					// ------------------- ------------------- -------------------
-					// Normal aerial movement
-					else
-					{
-						aerialComponent.AirControl       = math.max(aerialComponent.AirControl - DeltaTime * 0.1f, 0);
-						aerialComponent.Settings.Control = math.clamp(40f * aerialComponent.AirControl, 5f, 100);
-
-						velocity.Value = SrtMovement.AerialMove(velocity.Value, direction, aerialComponent.Settings, DeltaTime);
-
-						// glide in air
-						if (airTime.Value > 0.5f && input.Jump)
-						{
-							stamina.HasEnough(StaminaUsage.FromAbsolute(velocity.speed * 0.05f), out var power);
-							if (velocity.Value.y < -0.5f)
-							{
-								var prevPower = power;
-								var groundDistance = math.abs(groundResult.HitPosition.y - PhysicsCharacter.GetBottomPosition(moveData).y);
-								if (groundDistance < 10)
-								{
-									power *= 1 + (1 - groundDistance * (1f / 10f));
-								}
-								if (groundDistance < 5)
-								{
-									power *= 1 + (1 - groundDistance * (1f / 5f));
-								}
-								
-								velocity.Value.y = math.lerp(velocity.Value.y, -0.5f, DeltaTime * power * 0.25f);
-								velocity.Value.y = Mathf.MoveTowards(velocity.Value.y, -1, DeltaTime * power * 10f);
-
-								power = prevPower;
-							}
-
-							var flatVel = velocity.Value;
-							flatVel.y = 0.0f;
-							var dirToUse = direction;
-							flatVel   = Vector3.MoveTowards(flatVel, dirToUse * math.length(flatVel + dirToUse * 0.125f), DeltaTime * power * 12.5f);
-							flatVel.y = velocity.Value.y;
-							var distance = math.distance(flatVel, velocity.Value);
-							velocity.Value = flatVel;
-
-							stamina.Apply(StaminaUsage.FromPercentage(math.clamp((power + distance * 2f) * 0.01f, 0.0125f, 0.125f)));
-						}
-						else if (aerialComponent.Drag > 0.0f)
-						{
-							velocity.Value.x = Mathf.MoveTowards(velocity.Value.x, 0, DeltaTime * aerialComponent.Drag * 0.5f);
-							velocity.Value.x = math.lerp(velocity.Value.x, 0, DeltaTime * aerialComponent.Drag);
-							velocity.Value.z = Mathf.MoveTowards(velocity.Value.z, 0, DeltaTime * aerialComponent.Drag * 0.5f);
-							velocity.Value.z = math.lerp(velocity.Value.z, 0, DeltaTime * aerialComponent.Drag);
-
-							if (input.Crouch && velocity.Value.y > 0)
-							{
-								var prevY = velocity.Value.y;
-								
-								stamina.HasEnough(StaminaUsage.FromAbsolute(prevY * 0.05f), out var power);
-								velocity.Value.y = math.lerp(velocity.Value.y, math.min(prevY, 0), DeltaTime * power);
-								velocity.Value.y -= power * DeltaTime;
-								
-								stamina.Apply(StaminaUsage.FromPercentage(math.clamp(prevY * power * 0.0019f, 0.001f, 0.1f)));
-							}
-						}
-					}
-				}
-
-				var maxStamina = math.max(stamina.Value, stamina.Max);
-				stamina.Value = math.clamp(stamina.Value + stamina.GainPerSecond * DeltaTime, 0, maxStamina);
-
-				StaminaFromEntity.TrySet(entity, stamina, false); // this component is always updated, no matter what
-				GroundComponentFromEntity.TrySet(entity, groundComponent, true);
-				JumpComponentFromEntity.TrySet(entity, jumpComponent, true);
-				AerialComponentFromEntity.TrySet(entity, aerialComponent, false); // this component is always updated, no matter what
-				AirTimeFromEntity.TrySet(entity, airTime, false); // this component is always updated, no matter what
-				DodgeComponentFromEntity.TrySet(entity, dodgeComponent, true);
-				WallBounceComponentFromEntity.TrySet(entity, wallBounceComponent, true);
-
-				// get supported velocity
-				var supportedVelocity = float3.zero;
-				if ((groundResult.State & GroundState.StableOnGround) != 0)
-				{
-					var supportedEntity = PhysicsWorld.Bodies[groundResult.RigidBodyIndex].Entity;
-					if (VelocityFromEntity.Exists(supportedEntity))
-					{
-						supportedVelocity = VelocityFromEntity[supportedEntity].Value;
-					}
-				}
-
-				if (becameUnsupported || velocity.Value.y > 0)
-				{
-					velocity.Value += supportedVelocity;
-					supportedVelocity = float3.zero;
-				}
-				
-				moveData.Position = translation.Value;
-				moveData.Velocity = (velocity.Value + supportedVelocity) * DeltaTime;
-
-				var moveEvents = new NativeList<MoveEvent>(16, Allocator.Temp);
-				var moveResult = PhysicsCharacter.Move(moveData, PhysicsWorld, moveEvents);
-
-				var moveVector = math.normalizesafe(moveResult.NewPosition - moveData.Position);
-				if (velocity.Value.y <= 0 && velocity.speedSqr > 0 && moveVector.y <= 0 && (groundResult.State & GroundState.TouchGround) != 0 && (moveResult.GroundStatus.State & GroundState.TouchGround) == 0)
-				{
-					moveData.Position = moveResult.NewPosition;
-
-					if (PhysicsCharacter.StickOnGround(ref moveData, in PhysicsWorld, gravity * DeltaTime))
-					{
-						moveResult.NewPosition = moveData.Position;
-					}
-				}
-
-				for (var i = 0; i < moveEvents.Length; i++)
-				{
-					var ev = moveEvents[i];
-					if (ev.Type == MoveEventType.Obstacle)
-					{
-						velocity.Value = RayUtility.SlideVelocityNoYChange(velocity.Value, ev.SurfaceNormal);
-					}
-				}
-
-				translation.Value = moveResult.NewPosition;
-				if (moveResult.GroundStatus.State != GroundState.StableOnGround)
-					velocity.Value += gravity * DeltaTime;
-				else
-					velocity.Value.y = math.max(0.0f, velocity.Value.y);
-				
-				probeColl.Dispose();
-			}
+			pass = buffer[index];
+			return true;
 		}
 
-		private BuildPhysicsWorld m_BuildPhysicsWorld;
+		public static CharacterPass GetLastPass(this DynamicBuffer<CharacterPass> buffer)
+		{
+			if (buffer.Length == 0)
+				return default;
+			return buffer[buffer.Length - 1];
+		}
+
+		public static CharacterPass GetFirstPass(this DynamicBuffer<CharacterPass> buffer)
+		{
+			if (buffer.Length == 0)
+				return default;
+			return buffer[0];
+		}
+	}
+
+	// Stop moving character (assigned and removed by CharacterMovementInitSystem)
+	// Automatically assigned if the character has no health left or 'StopMovable' component is present
+	public struct IgnoreCharacterMovement : IComponentData
+	{
+	}
+
+	[UpdateInGroup(typeof(OrderGroup.Simulation.ConfigureSpawnedEntities))]
+	[UpdateInWorld(UpdateInWorld.TargetWorld.Server)]
+	public class CharacterSetupIgnoring : ComponentSystem
+	{
+		private EntityQuery m_RunningCharacterQuery;
+		private EntityQuery m_IgnoredCharacterQuery;
 
 		protected override void OnCreate()
 		{
 			base.OnCreate();
 
-			m_BuildPhysicsWorld = World.GetOrCreateSystem<BuildPhysicsWorld>();
+			m_RunningCharacterQuery = GetEntityQuery(new EntityQueryDesc
+			{
+				All  = new ComponentType[] {typeof(CharacterDescription), typeof(PhysicsCharacter)},
+				None = new ComponentType[] {typeof(IgnoreCharacterMovement)}
+			});
+			m_IgnoredCharacterQuery = GetEntityQuery(new EntityQueryDesc
+			{
+				All = new ComponentType[] {typeof(CharacterDescription), typeof(PhysicsCharacter), typeof(IgnoreCharacterMovement)}
+			});
 		}
 
-		protected override JobHandle OnUpdate(JobHandle inputDeps)
+		protected override void OnUpdate()
 		{
-			return new UpdateJob
+			Entities.With(m_RunningCharacterQuery).ForEach(ent =>
 			{
-				Tick = GetTick(true),
+				var add = false;
+				if (EntityManager.HasComponent<LivableHealth>(ent))
+				{
+					var health = EntityManager.GetComponentData<LivableHealth>(ent);
+					if (health.IsDead)
+						add = true;
+				}
+				// todo: check for StopMovable
 
-				InputFromEntity = GetComponentDataFromEntity<CharacterInput>(true),
+				if (add)
+				{
+					EntityManager.AddComponent(ent, typeof(IgnoreCharacterMovement));
+				}
+			});
+			Entities.With(m_IgnoredCharacterQuery).ForEach(ent =>
+			{
+				var remove = false;
+				if (EntityManager.HasComponent<LivableHealth>(ent))
+				{
+					var health = EntityManager.GetComponentData<LivableHealth>(ent);
+					if (!health.IsDead)
+						remove = true;
+				}
 
-				StaminaFromEntity             = GetComponentDataFromEntity<Stamina>(),
-				GroundComponentFromEntity     = GetComponentDataFromEntity<SrtGroundMovementComponent>(),
-				AerialComponentFromEntity     = GetComponentDataFromEntity<SrtAerialMovementComponent>(),
-				AirTimeFromEntity= GetComponentDataFromEntity<AirTime>(),
-				JumpComponentFromEntity       = GetComponentDataFromEntity<SrtJumpMovementComponent>(),
-				DodgeComponentFromEntity      = GetComponentDataFromEntity<SrtDodgeMovementComponent>(),
-				WallBounceComponentFromEntity = GetComponentDataFromEntity<SrtWallBounceMovementComponent>(),
-				
-				VelocityFromEntity = GetComponentDataFromEntity<Velocity>(true),
+				if (remove)
+				{
+					EntityManager.RemoveComponent(ent, typeof(IgnoreCharacterMovement));
+				}
+			});
+		}
+	}
 
-				PhysicsWorld = m_BuildPhysicsWorld.PhysicsWorld,
-				DeltaTime    = World.GetExistingSystem<ServerSimulationSystemGroup>().UpdateDeltaTime
-			}.Schedule(this, JobHandle.CombineDependencies(inputDeps, m_BuildPhysicsWorld.FinalJobHandle));
+	[UpdateInGroup(typeof(CharacterInteractionGroup))]
+	[UpdateInWorld(UpdateInWorld.TargetWorld.Server)]
+	public class CharacterMovementInitSystem : JobGameBaseSystem
+	{
+		private LazySystem<BuildPhysicsWorld> m_BuildPhysicWorld;
+		private JobPhysicsQuery               m_Query;
+
+		protected override void OnCreate()
+		{
+			base.OnCreate();
+
+			m_Query = new JobPhysicsQuery(() => SphereCollider.Create(new SphereGeometry {Radius = 0.1f}));
+		}
+
+		protected override unsafe JobHandle OnUpdate(JobHandle inputDeps)
+		{
+			var query     = m_Query;
+			var physWorld = this.L(ref m_BuildPhysicWorld).PhysicsWorld;
+			return Entities
+			       .ForEach((ref DynamicBuffer<CharacterPass> passes, ref Rotation rot, in CharacterInput input, in PhysicsCharacter physChar, in PhysicsCollider charColl, in Translation pos, in Velocity vel) =>
+			       {
+				       if (charColl.ColliderPtr->Type != ColliderType.Capsule)
+					       throw new InvalidOperationException("Only Capsule colliders are allowed for Character Movement.");
+
+				       passes.Clear();
+
+				       var capsuleColl = (CapsuleCollider*) charColl.ColliderPtr;
+				       if (physChar.MaxStepHeight > capsuleColl->Radius)
+					       throw new InvalidOperationException("1");
+
+				       // update rotation
+				       rot.Value = quaternion.AxisAngle(math.up(), math.radians(input.Look.x));
+
+				       var     probeColl = query.Blob;
+				       ref var coll      = ref probeColl.Value;
+				       coll.Filter = charColl.ColliderPtr->Filter;
+
+				       MoveData moveData;
+				       moveData.Character = physChar;
+				       moveData.Probe     = (SphereCollider*) probeColl.GetUnsafePtr();
+				       moveData.Collider  = capsuleColl;
+				       moveData.Position  = pos.Value;
+				       moveData.Rotation  = rot.Value;
+				       moveData.Velocity  = vel.Value;
+
+				       var groundResult = PhysicsCharacter.CheckGround(moveData, physWorld);
+				       var direction    = SrtMovement.ComputeDirection(rot.Value, input.Move);
+
+				       CharacterPass initPass;
+				       initPass.Character = physChar;
+				       initPass.Collider  = charColl;
+				       initPass.Probe     = probeColl;
+				       initPass.Direction = direction;
+				       initPass.Velocity  = vel.Value;
+				       initPass.Position  = pos.Value;
+				       initPass.Rotation  = rot.Value;
+				       initPass.Ground    = groundResult;
+				       passes.Add(initPass);
+			       })
+			       .WithReadOnly(physWorld)
+			       .Schedule(JobHandle.CombineDependencies(inputDeps, m_BuildPhysicWorld.Value.FinalJobHandle));
+		}
+	}
+
+	[UpdateInGroup(typeof(CharacterInteractionGroup))]
+	//[UpdateInWorld(UpdateInWorld.TargetWorld.Server)]
+	public class CharacterMovementEndSystem : JobGameBaseSystem
+	{
+		private LazySystem<BuildPhysicsWorld> m_BuildPhysicWorld;
+
+		protected override unsafe JobHandle OnUpdate(JobHandle inputDeps)
+		{
+			var velocityFromEntity = GetComponentDataFromEntity<Velocity>(true);
+			var physWorld          = this.L(ref m_BuildPhysicWorld).PhysicsWorld;
+			var tick = World.GetExistingSystem<GhostPredictionSystemGroup>().PredictingTick;
+			var delta = Time.DeltaTime;
+
+			return Entities
+			       .ForEach((ref DynamicBuffer<CharacterPass> passes, ref Translation pos, ref Velocity vel, in PhysicsCollider charColl, in GhostPredictedComponent predicted) =>
+			       {
+				       if (!GhostPredictionSystemGroup.ShouldPredict(tick, predicted))
+					       return;
+				       
+				       if (charColl.ColliderPtr->Type != ColliderType.Capsule)
+					       throw new InvalidOperationException("Only Capsule colliders are allowed for Character Movement.");
+
+				       if (passes.Length == 0)
+					       return;
+				       
+				       var gravity   = new float3(0, -15, 0);
+				       var lastPass  = passes.GetLastPass();
+				       var firstPass = passes.GetFirstPass();
+
+				       var hadBecameUnsupported = firstPass.Velocity.y > 0.01f && (firstPass.Ground.State & GroundState.TouchGround) != 0;
+
+				       var moveData   = lastPass.ToMoveData();
+				       var moveEvents = new NativeList<MoveEvent>(16, Allocator.Temp);
+
+				       // get supported velocity
+				       var supportedVelocity = float3.zero;
+				       if ((firstPass.Ground.State & GroundState.StableOnGround) != 0)
+				       {
+					       var supportedEntity = physWorld.Bodies[firstPass.Ground.RigidBodyIndex].Entity;
+					       if (velocityFromEntity.Exists(supportedEntity))
+					       {
+						       supportedVelocity = velocityFromEntity[supportedEntity].Value;
+					       }
+				       }
+
+				       if (hadBecameUnsupported || vel.Value.y > 0)
+				       {
+					       moveData.Velocity += supportedVelocity;
+				       }
+
+				       vel.Value = moveData.Velocity;
+				       moveData.Velocity *= delta;
+
+				       var moveResult = PhysicsCharacter.Move(moveData, physWorld, moveEvents);
+
+				       var moveVector = math.normalizesafe(moveResult.NewPosition - moveData.Position);
+				       if (vel.Value.y <= 0 && vel.speedSqr > 0 && moveVector.y <= 0 && (lastPass.Ground.State & GroundState.TouchGround) != 0 && (moveResult.GroundStatus.State & GroundState.TouchGround) == 0)
+				       {
+					       moveData.Position = moveResult.NewPosition;
+
+					       if (PhysicsCharacter.StickOnGround(ref moveData, in physWorld, gravity * delta))
+					       {
+						       moveResult.NewPosition = moveData.Position;
+					       }
+				       }
+
+				       for (var i = 0; i < moveEvents.Length; i++)
+				       {
+					       var ev = moveEvents[i];
+					       if (ev.Type == MoveEventType.Obstacle)
+					       {
+						       vel.Value = RayUtility.SlideVelocityNoYChange(vel.Value, ev.SurfaceNormal);
+					       }
+				       }
+
+				       pos.Value = moveResult.NewPosition;
+				       if (moveResult.GroundStatus.State != GroundState.StableOnGround)
+					       vel.Value += gravity * delta;
+				       else
+					       vel.Value.y = math.max(0.0f, vel.Value.y);
+			       })
+			       .WithReadOnly(velocityFromEntity)
+			       .WithReadOnly(physWorld)
+			       .WithNone<IgnoreCharacterMovement>()
+			       .WithAll<PhysicsCharacter, Rotation>()
+			       .Schedule(JobHandle.CombineDependencies(inputDeps, m_BuildPhysicWorld.Value.FinalJobHandle));
 		}
 	}
 }

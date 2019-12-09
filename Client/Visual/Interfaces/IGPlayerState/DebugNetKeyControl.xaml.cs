@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-#if !NOESIS
+﻿#if !NOESIS
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -17,13 +12,10 @@ using System.Windows.Shapes;
 using CharacterController;
 using Noesis;
 using Stormium.Core;
-using Stormium.Default;
 using StormiumTeam.GameBase;
-using UnityEngine;
 using Unity.Entities;
 using EventArgs = Noesis.EventArgs;
 using GUI = Noesis.GUI;
-using Path = Noesis.Path;
 using Unity.Mathematics;
 using Color = Noesis.Color;
 #endif

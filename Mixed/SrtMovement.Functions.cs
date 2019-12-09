@@ -60,7 +60,7 @@ namespace package.stormium.def
         /// <param name="settings">The movement settings</param>
         /// <param name="dt">Delta time</param>
         /// <returns>Return the new position</returns>
-        public static float3 GroundMove(float3 initialVelocity, float2 input, float3 direction, SrtGroundSettings settings, float dt)
+        public static float3 GroundMove(float3 initialVelocity, float2 input, float3 direction, SrtGroundSettings settings, float dt, float3 pos = default)
         {
             // Fix NaN errors
             direction = SrtFixNaN(direction);
@@ -78,7 +78,7 @@ namespace package.stormium.def
             );
 
             var velocity = ApplyFriction(initialVelocity, direction, friction, settings.SurfaceFriction, settings.FrictionSpeed, settings.Acceleration,
-                settings.Deacceleration, dt);
+                settings.Deacceleration, dt, pos);
             var wishSpeed                         = math.length(direction) * settings.BaseSpeed;
             if (float.IsNaN(wishSpeed)) wishSpeed = 0;
 
@@ -91,25 +91,16 @@ namespace package.stormium.def
 
             if (input.y > 0.5f)
             {
-                if (previousSpeed >= settings.BaseSpeed - 0.25f)
+                if (previousSpeed >= settings.BaseSpeed - 0.5f)
                 {
                     wishSpeed = settings.SprintSpeed;
 
-                    settings.Acceleration = 1f;
+                    settings.Acceleration = 2f;
                 }
             }
             
             velocity = GroundAccelerate
                 (velocity, direction, wishSpeed, settings.Acceleration, math.min(strafeAngleNormalized, 0.25f), settings.DecayBaseSpeedFriction, dt);
-
-            var nextSpeed = math.length(math.float3(velocity.x, 0, velocity.z));
-            if (previousSpeed > nextSpeed && nextSpeed < settings.BaseSpeed
-                                          && strafeAngleNormalized > 0.1f && strafeAngleNormalized < 0.9f)
-            {
-                velocity.y = 0;
-
-                velocity = Vector3.Normalize(velocity) * math.lerp(nextSpeed, previousSpeed, math.max(1 - strafeAngleNormalized, 0.8f));
-            }
 
             velocity.y = prevY;
 
@@ -160,19 +151,20 @@ namespace package.stormium.def
         /// <param name="deaccel">The deaceleration of the player</param>
         /// <param name="dt">The delta time</param>
         /// <returns>Return a new velocity from the friction</returns>
-        public static float3 ApplyFriction(float3 velocity, float3 direction, float friction, float groundFriction, float maxSpeed, float accel, float deaccel, float dt)
+        public static float3 ApplyFriction(float3 velocity, float3 direction, float friction, float groundFriction, float maxSpeed, float accel, float deaccel, float dt, float3 pos)
         {
             direction = math.normalizesafe(direction);
-            
-            var frictioned   = Vector3.MoveTowards(velocity, Vector3.zero, dt * groundFriction * friction);
-            var defrictioned = Vector3.Lerp(velocity, frictioned, (1 - math.length(direction)));
 
-            if (defrictioned.magnitude > maxSpeed)
-                defrictioned = Vector3.MoveTowards(defrictioned, frictioned, dt * deaccel);
+            var initialSpeed = math.length(velocity);
 
-            velocity = defrictioned;
+            velocity = Vector3.MoveTowards(velocity, direction * initialSpeed, groundFriction * friction * dt);
 
-            return velocity;
+            var remain = math.length(velocity) - maxSpeed;
+            if (remain > 0)
+                velocity = Vector3.MoveTowards(velocity, Vector3.zero, dt * deaccel * math.min(remain, 1));
+
+            velocity.y = 0;
+            return math.normalizesafe(velocity) * math.min(math.length(velocity), initialSpeed);
         }
 
         /// <summary>
@@ -188,24 +180,20 @@ namespace package.stormium.def
         public static float3 GroundAccelerate(float3 velocity, float3 wishDirection, float wishSpeed, float accelPower, float strafePower, float decay, float dt)
         {
             var speed = math.lerp(math.length(velocity), math.dot(velocity, wishDirection), strafePower);
+            //speed = math.length(velocity);
 
-            var nextSpeed = speed + (accelPower * dt);
-            if (nextSpeed >= wishSpeed && speed <= wishSpeed)
+            var power = 1 + math.abs(math.dot(math.normalizesafe(velocity), wishDirection));
+            var nextSpeed = speed + (accelPower * power * dt);
+            if (nextSpeed >= wishSpeed && speed <= wishSpeed + math.FLT_MIN_NORMAL)
                 nextSpeed = wishSpeed;
 
             if (math.length(wishDirection) < 0.5f)
                 return velocity;
-
-            if (nextSpeed <= wishSpeed)
-            {
-                var c = 10f;
-                if (wishSpeed >= 10)
-                    c = 1.25f;
-                
-                return Vector3.MoveTowards(math.normalizesafe(velocity), wishDirection, dt * 10 * accelPower) * nextSpeed;
-            }
-
-            return Vector3.ClampMagnitude(velocity + wishDirection * (accelPower * dt), math.lerp(speed, wishSpeed, decay * dt));
+            
+            velocity += wishDirection * (nextSpeed + accelPower) * dt * power;
+            velocity = math.normalizesafe(velocity) * math.clamp(math.length(velocity), 0, math.min(math.max(speed, wishSpeed), nextSpeed));
+            
+            return velocity;
         }
 
         /// <summary>

@@ -1,6 +1,6 @@
 using package.stormium.def;
 using Revolution;
-using Revolution.NetCode;
+using Unity.NetCode;
 using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -18,7 +18,7 @@ namespace Stormium.Default
 		public bool CanUseMovements;
 	}
 
-	public struct SrtGroundMovementComponent : IComponentData
+	public struct StandardGroundMovement : IComponentData
 	{
 		public SrtGroundSettings Settings;
 		public bool              CanCrouch;
@@ -33,16 +33,17 @@ namespace Stormium.Default
 		}
 	}
 
-	public struct SrtJumpMovementComponent : IComponentData
+	public struct StandardJumpMovement : IComponentData
 	{
 		public bool  IsJumpingInChain;
 		public UTick JumpQueued;
+		public UTick LastJump;
 
 		public StaminaUsage StaminaUsageOnChainingJump;
 		public StaminaUsage StaminaUsageOnStandardJump;
 	}
 
-	public struct SrtAerialMovementComponent : IComponentData
+	public struct StandardAerialMovement : IComponentData
 	{
 		public SrtAerialSettings Settings;
 		public float             AirControl;
@@ -83,7 +84,7 @@ namespace Stormium.Default
 		public bool IsWallSliding;
 	}
 
-	public struct SrtDodgeMovementComponent : IComponentData
+	public struct StandardDodgeMovement : IComponentData
 	{
 		public UTick DodgeQueued;
 		
@@ -92,7 +93,7 @@ namespace Stormium.Default
 		public bool EnableGroundDodge, EnableAerialDodge;
 	}
 
-	public struct SrtWallBounceMovementComponent : IComponentData
+	public struct StandardWallBounce : IComponentData
 	{
 		public bool EnableWallDodge, EnableWallJump;
 
@@ -193,7 +194,7 @@ namespace Stormium.Default
 			}
 		}
 		
-		public class Synchronize : ComponentSnapshotSystem_Basic<Stamina, Snapshot>
+		public class Synchronize : ComponentSnapshotSystemBasic<Stamina, Snapshot>
 		{
 			public override ComponentType ExcludeComponent => typeof(Exclude);
 		}

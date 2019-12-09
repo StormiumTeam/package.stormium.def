@@ -1,24 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.IO;
-using System.Linq;
+﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
-using System.Timers;
+using Grid = Noesis.Grid;
 #if !NOESIS
 using System.Windows.Controls;
 #else
+using StormiumTeam.GameBase.Misc;
+using Unity.Collections;
 using Noesis;
 using StormiumTeam.GameBase;
 using UnityEngine;
 using Unity.Entities;
 using EventArgs = Noesis.EventArgs;
 using GUI = Noesis.GUI;
-using Path = Noesis.Path;
-using Unity.Mathematics;
+
 #endif
 
 namespace IGPlayerState_blend.Unity
@@ -30,6 +24,7 @@ namespace IGPlayerState_blend.Unity
     {
         private StaminaControl     m_StaminaControl;
         private DebugNetKeyControl m_DebugNetKeyControl;
+        private Grid m_TestRectangle;
 
         public PlayerStateInterfaceControl()
         {
@@ -50,13 +45,31 @@ namespace IGPlayerState_blend.Unity
         {
             m_StaminaControl     = (StaminaControl) FindName("StaminaControl");
             m_DebugNetKeyControl = (DebugNetKeyControl) FindName("DebugNetKeyControl");
+            m_TestRectangle = (Grid) FindName("FindThing");
         }
 
 #if NOESIS
-        public void OnUpdate(Entity localPlayer, CameraState cameraState)
+        public void OnUpdate(Entity localPlayer, CameraState cameraState, EntityQuery characterQuery)
         {
             m_StaminaControl.OnUpdate(World, cameraState.Target);
             m_DebugNetKeyControl.OnUpdate(World, cameraState.Target);
+
+            using (var entities = characterQuery.ToEntityArray(Allocator.TempJob))
+            {
+                foreach (var ch in entities)
+                {
+                    if (cameraState.Target == ch)
+                        continue;
+
+                    var cam = World.GetExistingSystem<ClientCreateCameraSystem>().Camera;
+                    
+                    var viewport = cam.WorldToViewportPoint(new Vector3(2, 2, 2));
+                    var margin = m_TestRectangle.Margin;
+                    margin.Left = viewport.x * this.ActualWidth;
+                    margin.Bottom = viewport.y * this.ActualHeight;
+                    m_TestRectangle.Margin = margin;
+                }
+            }
         }
 #endif
     }

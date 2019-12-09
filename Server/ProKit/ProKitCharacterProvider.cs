@@ -1,11 +1,14 @@
 using CharacterController;
 using package.stormium.def;
+using Stormium.Core.Data;
 using Stormium.Default;
+using Stormium.Default.Mixed;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.NetCode;
 using Unity.Physics;
 using Unity.Transforms;
 
@@ -26,27 +29,47 @@ namespace ProKit
 			entityComponents = new ComponentType[]
 			{
 				typeof(CharacterComponent),
-				typeof(CharacterDescription),
-				typeof(LivableDescription),
-				typeof(HealthContainer),
+				typeof(CharacterPass),
 				typeof(LivableHealth),
-				typeof(AimLookState),
 				typeof(HealthModifyingHistory),
+				typeof(CurrentWeapon),
+				
+				// --- Descriptions
+				typeof(CharacterDescription),
+				typeof(WeaponHolderDescription),
+				typeof(ActionHolderDescription),
+				typeof(LivableDescription),
 				typeof(MovableDescription),
-				typeof(PhysicsCharacter),
-				typeof(Stamina),
-				typeof(SrtGroundMovementComponent),
-				typeof(SrtAerialMovementComponent),
-				typeof(AirTime),
-				typeof(SrtJumpMovementComponent),
-				typeof(SrtDodgeMovementComponent),
-				typeof(SrtWallBounceMovementComponent),
-				typeof(CharacterInput),
+
+				// -- Transforms
 				typeof(Translation),
 				typeof(Rotation),
 				typeof(LocalToWorld),
+				typeof(TransformHistory),
+
+				// -- States
+				typeof(Stamina),
+				typeof(AirTime),
+				typeof(CharacterInput),
+				typeof(AimLookState),
+
+				// --- Movements
+				typeof(StandardJumpMovement),
+				typeof(StandardDodgeMovement),
+				typeof(StandardWallBounce),
+				typeof(StandardGroundMovement),
+				typeof(StandardAerialMovement),
+
+				// - Physics
+				typeof(PhysicsCollider),
+				typeof(PhysicsCharacter),
 				typeof(Velocity),
-				typeof(PhysicsCollider)
+
+				// --- Containers
+				typeof(ActionContainer),
+				typeof(HitShapeContainer),
+				
+				typeof(GhostPredictedComponent)
 			};
 		}
 
@@ -57,36 +80,36 @@ namespace ProKit
 				MaxStepHeight = 0.5f
 			});
 			EntityManager.SetComponentData(entity, new Stamina {Value = 0f, Max = 1f, GainPerSecond = 0.18f});
-			EntityManager.SetComponentData(entity, new SrtGroundMovementComponent
+			EntityManager.SetComponentData(entity, new StandardGroundMovement
 			{
 				Settings  = SrtGroundSettings.NewBase(),
 				CanCrouch = true,
 				CanSprint = true
 			});
-			EntityManager.SetComponentData(entity, new SrtAerialMovementComponent
+			EntityManager.SetComponentData(entity, new StandardAerialMovement
 			{
 				Settings             = SrtAerialSettings.NewBase(),
 				AirControl           = 1.0f,
 				AirControlResistance = 20f,
-				Drag = 0.075f
+				Drag                 = 0.08f
 			});
-			EntityManager.SetComponentData(entity, new SrtJumpMovementComponent
+			EntityManager.SetComponentData(entity, new StandardJumpMovement
 			{
-				IsJumpingInChain = false,
-				JumpQueued = default,
+				IsJumpingInChain           = false,
+				JumpQueued                 = default,
 				StaminaUsageOnStandardJump = StaminaUsage.FromPercentage(0.05f),
 				StaminaUsageOnChainingJump = StaminaUsage.FromPercentage(0.13f)
 			});
-			EntityManager.SetComponentData(entity, new SrtDodgeMovementComponent
+			EntityManager.SetComponentData(entity, new StandardDodgeMovement
 			{
 				EnableGroundDodge = true,
-				StaminaUsage = StaminaUsage.FromPercentage(0.3f)
+				StaminaUsage      = StaminaUsage.FromPercentage(0.3f)
 			});
-			EntityManager.SetComponentData(entity, new SrtWallBounceMovementComponent
+			EntityManager.SetComponentData(entity, new StandardWallBounce
 			{
-				EnableWallDodge = true,
-				EnableWallJump  = true,
-				StaminaUsageOnWallJump = StaminaUsage.FromPercentage(0.3f),
+				EnableWallDodge         = true,
+				EnableWallJump          = true,
+				StaminaUsageOnWallJump  = StaminaUsage.FromPercentage(0.2f),
 				StaminaUsageOnWallDodge = StaminaUsage.FromAbsolute(0.3f)
 			});
 			EntityManager.SetComponentData(entity, new PhysicsCollider

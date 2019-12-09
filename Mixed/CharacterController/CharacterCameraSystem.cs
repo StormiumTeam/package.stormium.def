@@ -1,4 +1,4 @@
-using Revolution.NetCode;
+using Unity.NetCode;
 using Stormium.Core;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
@@ -17,7 +17,7 @@ namespace CharacterController
 		{
 			Entities.ForEach((ref Translation tr, ref CameraModifierData camMod, ref CharacterInput charInput, ref AimLookState aimLook, ref Relative<PlayerDescription> playerRelative) =>
 			{
-				camMod.Position = tr.Value + math.up() * 1.25f;
+				camMod.Position = tr.Value + math.up() * 1.125f;
 
 				var input = charInput;
 				if (EntityManager.HasComponent<GamePlayerLocalTag>(playerRelative.Target))

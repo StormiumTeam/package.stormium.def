@@ -1,7 +1,7 @@
 using System;
 using Authoring;
 using package.stormiumteam.shared.ecs;
-using Revolution.NetCode;
+using Unity.NetCode;
 using Stormium.Default.Mixed;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
@@ -11,13 +11,14 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics;
+using Unity.Physics.Systems;
 using Unity.Transforms;
 using UnityEngine;
 
 namespace DefaultNamespace
 {
 	[UpdateInGroup(typeof(OrderGroup.Simulation.UpdateEntities.Interaction))]
-	[UpdateInWorld(WorldType.ServerWorld)]
+	[UpdateInWorld(UpdateInWorld.TargetWorld.Server)]
 	public unsafe class LaunchPadSimulation : JobGameBaseSystem
 	{
 		[BurstCompile]
@@ -43,7 +44,8 @@ namespace DefaultNamespace
 				if (!padCollider.ColliderPtr->CalculateAabb(padRigidTransform).Overlaps(movableCollider.ColliderPtr->CalculateAabb(movableRigidTransform)))
 					return false;
 
-				var collection = new CustomCollideCollection(new CustomCollide(movableCollider, movableTransform));
+				var cc = new CustomCollide(movableCollider, movableTransform);
+				var collection = new CustomCollideCollection(ref cc);
 				var penetrateInput = new ColliderDistanceInput
 				{
 					Collider    = padCollider.ColliderPtr,
@@ -52,7 +54,7 @@ namespace DefaultNamespace
 				};
 
 				var anyCollector = new AnyHitCollector<DistanceHit>(0.0f);
-				if (!collection.CalculateDistance(penetrateInput, ref anyCollector, true))
+				if (!collection.CalculateDistance(penetrateInput, ref anyCollector))
 					return false;
 
 				ImpulseEventList.Add(new TargetImpulseEvent

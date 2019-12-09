@@ -12,6 +12,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)DebugNetKeyControl.xaml.cs">
       <DependentUpon>DebugNetKeyControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="$(MSBuildThisFileDirectory)MathConverter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PlayerStateInterfaceControl.xaml.cs">
       <DependentUpon>PlayerStateInterfaceControl.xaml</DependentUpon>
     </Compile>

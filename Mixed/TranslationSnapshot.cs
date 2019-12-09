@@ -1,5 +1,6 @@
+using DefaultNamespace;
 using Revolution;
-using Revolution.NetCode;
+using Unity.NetCode;
 using Revolution.Utils;
 using Unity.Collections;
 using Unity.Entities;
@@ -8,9 +9,11 @@ using Unity.Networking.Transport;
 using Unity.Transforms;
 using UnityEngine;
 
+[assembly: RegisterGenericComponentType(typeof(Predicted<PredictedTranslationSnapshot>))]
+
 namespace DefaultNamespace
 {
-	public struct TranslationSnapshot : IReadWriteSnapshot<TranslationSnapshot>, ISynchronizeImpl<Translation>
+	public struct TranslationSnapshot : IReadWriteSnapshot<TranslationSnapshot>, ISynchronizeImpl<Translation>, IInterpolatable<TranslationSnapshot>
 	{
 		public struct Exclude : IComponentData
 		{
@@ -43,13 +46,20 @@ namespace DefaultNamespace
 			component.Value = Value.Get(0.001f);
 		}
 
-		public class Synchronize : ComponentSnapshotSystem_Basic<Translation, TranslationSnapshot>
+		public class Synchronize : ComponentSnapshotSystemBasic<Translation, TranslationSnapshot>
 		{
 			public override ComponentType ExcludeComponent => typeof(Exclude);
 		}
-
-		public class Update : ComponentUpdateSystemDirect<Translation, TranslationSnapshot>
+		
+		public class Update : ComponentUpdateSystemInterpolated<Translation, TranslationSnapshot>
 		{
+			public Update() : base(false)
+			{}
+		}
+
+		public void Interpolate(TranslationSnapshot target, float factor)
+		{
+			Value.Result = (int3) math.lerp(Value.Result, target.Value.Result, factor);
 		}
 	}
 
@@ -93,7 +103,7 @@ namespace DefaultNamespace
 			component.Value = Value.Get(0.001f);
 		}
 
-		public class Synchronize : ComponentSnapshotSystem_Basic_Predicted<Translation, PredictedTranslationSnapshot>
+		public class Synchronize : ComponentSnapshotSystemBasicPredicted<Translation, PredictedTranslationSnapshot>
 		{
 			public override ComponentType ExcludeComponent => typeof(Exclude);
 
@@ -108,7 +118,8 @@ namespace DefaultNamespace
 
 		public class Update : ComponentUpdateSystemInterpolated<Translation, PredictedTranslationSnapshot>
 		{
-			protected override bool IsPredicted => true;
+			public Update() : base(true)
+			{}
 		}
 
 		public void Interpolate(PredictedTranslationSnapshot target, float factor)
@@ -121,7 +132,7 @@ namespace DefaultNamespace
 			var predictor = new GhostDeltaPredictor(tick, Tick, baseline1.Tick, baseline2.Tick);
 			for (var i = 0; i != 3; i++)
 			{
-				//Value[i] = predictor.PredictInt(Value[i], baseline1.Value[i], baseline2.Value[i]);
+				Value[i] = predictor.PredictInt(Value[i], baseline1.Value[i], baseline2.Value[i]);
 			}
 		}
 	}

@@ -1,29 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
-using System.Timers;
 #if !NOESIS
 using System.Windows.Controls;
 using System.Windows;
 #else
 using Noesis;
 using Revolution;
-using Revolution.NetCode;
+using Unity.NetCode;
 using RPCs;
-using StormiumTeam.GameBase;
-using UnityEngine;
 using Unity.Entities;
 using EventArgs = Noesis.EventArgs;
 using GUI = Noesis.GUI;
-using Path = Noesis.Path;
 using Unity.Mathematics;
+using UnityEngine;
+
 #endif
 
 namespace IGDeathMatch_blend.Unity

@@ -1,62 +1,115 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Karambolo.Common;
 using Revolution;
-using Revolution.NetCode;
+using Unity.NetCode;
 using StormiumTeam.GameBase;
 using Unity.Entities;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace DefaultNamespace
 {
     public class SetCollectionSystem : ComponentSystem
     {
+        public enum SystemType
+        {
+            Dynamic,
+            Description,
+            Command
+        }
+
+        [Serializable]
+        private class FileData
+        {
+            public string[] systemTypes;
+        }
+
+        private static Dictionary<SystemType, Type[]> s_DynamicTypes;
+        private static Type[] s_CurrentTreatedArray;
+
+        private static void SetSystems(SystemType type, Type interfaceType, Type subclass)
+        {
+            Type[] result;
+
+            var filePath = $"{Application.streamingAssetsPath}/systems_{type.ToString().ToLower()}.json";
+            if (!File.Exists(filePath))
+            {
+                result = GetTypes(interfaceType, subclass)
+                    .ToArray();
+
+                File.Create(filePath).Dispose();
+
+                var strTypes = new string[result.Length];
+                s_CurrentTreatedArray = result;
+                Parallel.ForEach(strTypes, (source, state, i) => { strTypes[i] = s_CurrentTreatedArray[i].AssemblyQualifiedName; });
+
+                File.WriteAllText(filePath, JsonUtility.ToJson(new FileData
+                {
+                    systemTypes = strTypes
+                }, true));
+            }
+            else
+            {
+                var strTypes = JsonUtility.FromJson<FileData>(File.ReadAllText(filePath)).systemTypes;
+                result = new Type[strTypes.Length];
+
+                s_CurrentTreatedArray = result;
+
+                Parallel.ForEach(strTypes, (source, state, i) =>
+                {
+                    s_CurrentTreatedArray[i] = Type.GetType(source);
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+                    if (s_CurrentTreatedArray[i] == null)
+                        throw new NullReferenceException();
+#endif
+                });
+            }
+
+            s_DynamicTypes[type] = result;
+        }
+
         protected override void OnCreate()
         {
+            if (s_DynamicTypes == null)
+            {
+                var stopwatch = new Stopwatch();
+                stopwatch.Start();
+                
+                s_DynamicTypes = new Dictionary<SystemType, Type[]>(4);
+                SetSystems(SystemType.Dynamic, typeof(IDynamicSnapshotSystem), typeof(ComponentSystemBase));
+                SetSystems(SystemType.Description, typeof(IEntityDescription), null);
+                SetSystems(SystemType.Command, typeof(ICommandData), null);
+                
+                stopwatch.Stop();
+                Debug.LogError($"Time took for searching systems for builders = " + stopwatch.ElapsedMilliseconds);
+            }
+
             World.GetOrCreateSystem<SnapshotManager>().SetFixedSystemsFromBuilder((world, builder) =>
             {
                 var i = 1;
-                foreach (var type in GetTypes(typeof(ISystemDelegateForSnapshot), typeof(ComponentSystemBase)))
+                foreach (var type in s_DynamicTypes[SystemType.Dynamic])
                 {
-                    Debug.Log($"System#{i} --> {type}");
                     builder.Add(world.GetOrCreateSystem(type));
                     i++;
                 }
 
-                foreach (var type in GetTypes(typeof(IEntityDescription), null))
+                foreach (var type in s_DynamicTypes[SystemType.Description])
                 {
                     builder.Add(world.GetOrCreateSystem(typeof(ComponentSnapshotSystemTag<>).MakeGenericType(type)));
                     i++;
                 }
             });
-            World.GetOrCreateSystem<RpcCollectionSystem>().SetFixedCollection((world, builder) =>
-            {
-                foreach (var type in GetTypes(typeof(IRpcCommandRequestComponentData), null))
-                {
-                    try
-                    {
-                        builder.Add((RpcProcessSystemBase) world.GetOrCreateSystem(typeof(RpcCommandRequest<>).MakeGenericType(type)));
-                    }
-                    catch (Exception ex)
-                    {
-                        throw;
-                    }
-                }
-            });
             World.GetOrCreateSystem<CommandCollectionSystem>().SetFixedCollection((world, builder) =>
             {
-                foreach (var type in GetTypes(typeof(ICommandData), null))
+                foreach (var type in s_DynamicTypes[SystemType.Command])
                 {
-                    try
-                    {
-                        builder.Add((CommandProcessSystemBase) world.GetOrCreateSystem(typeof(DefaultCommandProcessSystem<>).MakeGenericType(type)));
-                    }
-                    catch (Exception ex)
-                    {
-                        throw;
-                    }
+                    builder.Add((CommandProcessSystemBase) world.GetOrCreateSystem(typeof(DefaultCommandProcessSystem<>).MakeGenericType(type)));
                 }
             });
         }
@@ -75,13 +128,11 @@ namespace DefaultNamespace
                 m_AssembliesTypes = new List<Type>(1024);
 
                 var assemblies      = AppDomain.CurrentDomain.GetAssemblies();
-                var validAssemblies = new List<Assembly>();
                 foreach (var asm in assemblies)
                 {
                     try
                     {
                         var types = asm.GetTypes();
-                        validAssemblies.Add(asm);
                         m_AssembliesTypes.AddRange(types);
                     }
                     catch (Exception e)
@@ -90,14 +141,17 @@ namespace DefaultNamespace
                     }
                 }
 
-                m_AssembliesTypes = m_AssembliesTypes.OrderBy(t => t.FullName).ToList();
+                m_AssembliesTypes = m_AssembliesTypes.AsParallel()
+                                                     .WithDegreeOfParallelism(4)
+                                                     .OrderBy(t => t.FullName)
+                                                     .ToList();
             }
 
-            return from type in m_AssembliesTypes
-                   where type.HasInterface(interfaceType)
-                         && (subclass == null || type.IsSubclassOf(subclass))
-                         && !type.IsAbstract
-                   select type;
+            foreach (var type in m_AssembliesTypes)
+            {
+                if (type.HasInterface(interfaceType) && (subclass == null || type.IsSubclassOf(subclass)) && !type.IsAbstract && !type.ContainsGenericParameters) 
+                    yield return type;
+            }
         }
     }
 
@@ -105,7 +159,7 @@ namespace DefaultNamespace
     {
         protected override void OnCreate()
         {
-            GameStatic.Version = 2;
+            GameStatic.Version = 3;
         }
 
         protected override void OnUpdate()

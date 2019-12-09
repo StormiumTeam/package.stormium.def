@@ -13,7 +13,7 @@ namespace CharacterController
 	{
 		private struct JobGatherEvent : IJobForEach_C<TargetImpulseEvent>
 		{
-			public ComponentDataFromEntity<SrtAerialMovementComponent> AerialComponentFromEntity;
+			[NativeDisableParallelForRestriction] public ComponentDataFromEntity<StandardAerialMovement> AerialComponentFromEntity;
 
 			public void Execute([ReadOnly] ref TargetImpulseEvent impulseEvent)
 			{
@@ -34,7 +34,7 @@ namespace CharacterController
 		{
 			return new JobGatherEvent
 			{
-				AerialComponentFromEntity = GetComponentDataFromEntity<SrtAerialMovementComponent>()
+				AerialComponentFromEntity = GetComponentDataFromEntity<StandardAerialMovement>()
 			}.ScheduleSingle(this, inputDeps);
 		}
 	}

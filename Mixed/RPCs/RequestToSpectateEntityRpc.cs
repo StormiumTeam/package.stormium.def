@@ -1,6 +1,7 @@
 using Revolution;
-using Revolution.NetCode;
+using Unity.NetCode;
 using StormiumTeam.GameBase;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Networking.Transport;
@@ -8,8 +9,12 @@ using UnityEngine;
 
 namespace RPCs
 {
-	public struct RequestToSpectateEntityRpc : IRpcCommandRequestComponentData
+	[BurstCompile]
+	public struct RequestToSpectateEntityRpc : IRpcCommand
 	{
+		public class RequestSystem : RpcCommandRequestSystem<RequestToSpectateEntityRpc>
+		{}
+		
 		public uint GhostTarget;
 
 		public void Serialize(DataStreamWriter writer)
@@ -22,7 +27,16 @@ namespace RPCs
 			GhostTarget = reader.ReadUInt(ref ctx);
 		}
 
-		public Entity SourceConnection { get; set; }
+		[BurstCompile]
+		private static void InvokeExecute(ref RpcExecutor.Parameters parameters)
+		{
+			RpcExecutor.ExecuteCreateRequestComponent<RequestToSpectateEntityRpc>(ref parameters);
+		}
+
+		public PortableFunctionPointer<RpcExecutor.ExecuteDelegate> CompileExecute()
+		{
+			return new PortableFunctionPointer<RpcExecutor.ExecuteDelegate>(InvokeExecute);
+		}
 	}
 
 	public struct SpectateEntityRequest : IComponentData
@@ -48,7 +62,7 @@ namespace RPCs
 		protected override void OnUpdate()
 		{
 			// Transform all RPC request
-			Entities.With(m_RpcGroup).ForEach((Entity reqEntity, ref RequestToSpectateEntityRpc req) =>
+			Entities.With(m_RpcGroup).ForEach((Entity reqEntity, ref RequestToSpectateEntityRpc req, ref ReceiveRpcCommandRequestComponent receive) =>
 			{
 				var requestCopy = req;
 
@@ -73,7 +87,7 @@ namespace RPCs
 				EntityManager.SetComponentData(transformed, new SpectateEntityRequest
 				{
 					Target    = ghostEntity,
-					Spectator = EntityManager.GetComponentData<CommandTargetComponent>(req.SourceConnection).targetEntity
+					Spectator = EntityManager.GetComponentData<CommandTargetComponent>(receive.SourceConnection).targetEntity
 				});
 				EntityManager.DestroyEntity(reqEntity);
 			});

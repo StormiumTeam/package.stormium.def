@@ -3,6 +3,7 @@ using Stormium.Default.Mixed;
 using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Physics.Systems;
 using UnityEngine;
 
 namespace Authoring
@@ -41,6 +42,7 @@ namespace Authoring
 				localMomentum = localMomentum,
 				force         = force
 			});
+			dstManager.AddComponent(entity, typeof(IgnorePhysicsWorld));
 			dstManager.AddBuffer<LaunchPadCooldown>(entity);
 		}
 

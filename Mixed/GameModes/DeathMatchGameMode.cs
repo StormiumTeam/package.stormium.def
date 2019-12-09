@@ -55,4 +55,9 @@ namespace Stormium.Default.Mixed.GameModes
 			public override ComponentType ExcludeComponent => typeof(Exclude);
 		}
 	}
+
+	public struct DeathMatchCharacter : IComponentData
+	{
+		public UTick RespawnAt;
+	}
 }

@@ -1,7 +1,7 @@
 using CharacterController;
 using package.stormiumteam.shared.ecs;
 using Revolution;
-using Revolution.NetCode;
+using Unity.NetCode;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Data;
 using Unity.Collections;
@@ -55,12 +55,12 @@ namespace ProKit
 
 		public override ComponentType ExcludeComponent => typeof(Exclude);
 
-		private static void OnSerialize(uint systemid, ref SerializeClientData serializedata, ref DataStreamWriter writer)
+		private static void OnSerialize(ref SerializeParameters parameters)
 		{
 
 		}
 
-		private void OnDeserialize(uint systemid, uint tick, ref DeserializeClientData deserializedata, ref DataStreamReader reader, ref DataStreamReader.Context ctx)
+		private void OnDeserialize(ref DeserializeParameters parameters)
 		{
 			
 		}

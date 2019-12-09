@@ -1,5 +1,5 @@
 using Revolution;
-using Revolution.NetCode;
+using Unity.NetCode;
 using Revolution.Utils;
 using Unity.Entities;
 using Unity.Networking.Transport;
@@ -39,7 +39,7 @@ namespace DefaultNamespace
 			component.Value = Value.Quaternion;
 		}
 
-		public class Synchronize : ComponentSnapshotSystem_Basic<Rotation, RotationSnapshot>
+		public class Synchronize : ComponentSnapshotSystemBasic<Rotation, RotationSnapshot>
 		{
 			public override ComponentType ExcludeComponent => typeof(Exclude);
 		}

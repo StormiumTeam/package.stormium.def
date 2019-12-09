@@ -5,9 +5,24 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:local="clr-namespace:IGPlayerState_blend.Unity"
              xmlns:noesis="clr-namespace:NoesisGUIExtensions;assembly=Noesis.GUI.Extensions"
+             xmlns:ikriv="clr-namespace:IKriv.Wpf"
              mc:Ignorable="d" 
              d:DesignHeight="1080" d:DesignWidth="1920">
     <Grid>
+        <Grid x:Name="FindThing" Width="50" Height="16" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="0" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform
+                        X="{Binding RelativeSource={RelativeSource AncestorType=Grid}, Path=Width}"
+                        Y="{Binding RelativeSource={RelativeSource AncestorType=Grid}, Path=Height}"/>
+                </TransformGroup>
+            </Grid.RenderTransform>
+            <TextBlock Text="26" TextAlignment="Center" Foreground="White" noesis:Text.Stroke="Black" noesis:Text.StrokeThickness="2"/>
+        </Grid>
+        <Rectangle Fill="White" Width="12" Height="11.5" RadiusX="5" RadiusY="5" Stroke="Black" StrokeThickness="2" HorizontalAlignment="Center" VerticalAlignment="Center" />
         <Grid x:Name="DebugNetKeyGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="100*"/>

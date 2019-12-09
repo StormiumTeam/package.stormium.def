@@ -1,11 +1,10 @@
-using NoesisGUIExtensions;
-using Revolution.NetCode;
+using CharacterController;
+using Unity.NetCode;
 using Stormium.Default.Client.Visual.Interfaces;
-using Stormium.Default.Mixed.GameModes;
 using StormiumTeam.GameBase;
 using Unity.Collections;
 using Unity.Entities;
-using UnityEngine;
+using Unity.Transforms;
 using UnityEngine.AddressableAssets;
 
 namespace IGPlayerState_blend.Unity
@@ -16,6 +15,7 @@ namespace IGPlayerState_blend.Unity
 	}
 	
 	[UpdateInGroup(typeof(ClientPresentationSystemGroup))]
+	[UpdateAfter(typeof(UpdateCameraSystem))]
 	[AlwaysUpdateSystem]
 	public class PlayerStateInterfaceSpawner : GameBaseSystem
 	{
@@ -25,6 +25,7 @@ namespace IGPlayerState_blend.Unity
 		public HudElement Hud;
 		
 		private AsyncOperationModule m_AsyncOpModule;
+		private EntityQuery m_CharacterQuery;
 		
 		protected override void OnCreate()
 		{
@@ -32,6 +33,7 @@ namespace IGPlayerState_blend.Unity
 			
 			GetModule(out m_AsyncOpModule);
 			m_AsyncOpModule.Add(Addressables.LoadAssetAsync<NoesisXaml>("def/visuals/Interfaces/IGPlayerState/PlayerStateInterfaceControl.asset"), new AsyncData());
+			m_CharacterQuery = GetEntityQuery(typeof(CharacterDescription), typeof(Translation));
 		}
 
 		protected override void OnUpdate()
@@ -65,9 +67,9 @@ namespace IGPlayerState_blend.Unity
 			}
 
 			Hud.Active = CanAccessToHud(out var currPlayer, out var cameraState);
-			if (Hud.Active)
+			if (Hud.Active && Hud.Content is PlayerStateInterfaceControl control)
 			{
-				(Hud.Content as PlayerStateInterfaceControl).OnUpdate(currPlayer, cameraState);
+				control.OnUpdate(currPlayer, cameraState, m_CharacterQuery);
 			}
 		}
 

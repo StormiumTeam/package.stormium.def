@@ -1,8 +1,7 @@
-using Revolution.NetCode;
+using Unity.NetCode;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Components;
 using StormiumTeam.GameBase.Data;
-using StormiumTeam.Shared.Gen;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;

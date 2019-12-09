@@ -41,7 +41,7 @@ namespace DefaultNamespace
 			}
 		}
 
-		public class Synchronize : ComponentSnapshotSystem_Delta<PlayerCharacter, Snapshot, GhostSetup>
+		public class Synchronize : ComponentSnapshotSystemDelta<PlayerCharacter, Snapshot, GhostSetup>
 		{
 			public override ComponentType ExcludeComponent => typeof(Exclude);
 		}

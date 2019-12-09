@@ -1,6 +1,6 @@
 using package.stormiumteam.shared;
 using Revolution;
-using Revolution.NetCode;
+using Unity.NetCode;
 using Revolution.Utils;
 using Stormium.Core;
 using Stormium.Default;
@@ -98,7 +98,7 @@ namespace CharacterController
 			}
 		}
 
-		public class Synchronize : ComponentSnapshotSystem_Basic<CharacterInput, Snapshot>
+		public class Synchronize : ComponentSnapshotSystemBasic<CharacterInput, Snapshot>
 		{
 			public override ComponentType ExcludeComponent => typeof(Exclude);
 		}
@@ -108,8 +108,8 @@ namespace CharacterController
 		}
 	}
 
-	[UpdateInGroup(typeof(PredictionSimulationSystemGroup))]
-	[UpdateInWorld(WorldType.ServerWorld)]
+	[UpdateInGroup(typeof(GhostPredictionSystemGroup))]
+	[UpdateInWorld(UpdateInWorld.TargetWorld.Server)]
 	public class CharacterControllerSetInput : GameBaseSystem
 	{
 		protected override void OnUpdate()
@@ -127,12 +127,9 @@ namespace CharacterController
 				input.Crouch = userCommand.IsCrouching;
 
 				aimLookState.Aim = input.Look;
-
-				Debug.DrawRay(ltw.Position, Vector3.up * 2, Color.red);
-				Debug.DrawRay(ltw.Position, ltw.Forward, Color.green);
 			});
 
-			Entities.ForEach((ref SrtJumpMovementComponent component, ref Relative<PlayerDescription> playerRelative) =>
+			Entities.ForEach((ref StandardJumpMovement component, ref Relative<PlayerDescription> playerRelative) =>
 			{
 				if (!EntityManager.HasComponent<GamePlayerUserCommand>(playerRelative.Target) || !EntityManager.HasComponent<WorldOwnedTag>(playerRelative.Target))
 					return;
@@ -143,7 +140,7 @@ namespace CharacterController
 					component.JumpQueued = UTick.AddTick(GetTick(true), 2);
 				}
 			});
-			Entities.ForEach((ref SrtDodgeMovementComponent component, ref Relative<PlayerDescription> playerRelative) =>
+			Entities.ForEach((ref StandardDodgeMovement component, ref Relative<PlayerDescription> playerRelative) =>
 			{
 				if (!EntityManager.HasComponent<GamePlayerUserCommand>(playerRelative.Target) || !EntityManager.HasComponent<WorldOwnedTag>(playerRelative.Target))
 					return;
@@ -151,7 +148,7 @@ namespace CharacterController
 				var userCommand = EntityManager.GetComponentData<GamePlayerUserCommand>(playerRelative.Target);
 				if (userCommand.QueueDodge)
 				{
-					component.DodgeQueued = UTick.AddTick(GetTick(true), 2);
+					component.DodgeQueued = UTick.AddTick(GetTick(true), 4);
 				}
 			});
 		}
